@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rebanho Leiteiro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .card {
+            background-color: #fff;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .header-bg {
+            background-color: #1c64f2;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100">
+
+    <!-- Modal for alerts -->
+    <div id="modal-container" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 sm:w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <h3 id="modal-title" class="text-lg leading-6 font-medium text-gray-900"></h3>
+                <div class="mt-2 px-7 py-3">
+                    <p id="modal-message" class="text-sm text-gray-500"></p>
+                </div>
+                <div class="items-center px-4 py-3">
+                    <button id="modal-close" class="px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading indicator -->
+    <div id="loading-spinner" class="fixed inset-0 flex items-center justify-center bg-gray-100 z-50 hidden">
+        <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+    </div>
+
+    <!-- Main App Container -->
+    <div id="app-container" class="main-container hidden">
+
+        <!-- Navbar -->
+        <nav class="header-bg p-4 shadow-md sticky top-0 z-50">
+            <div class="container mx-auto flex justify-between items-center flex-wrap">
+                <a href="#" class="text-white text-2xl font-bold rounded-lg px-2 py-1">Rebanho Leiteiro</a>
+                <button id="menu-toggle" class="text-white lg:hidden">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" />
+                    </svg>
+                </button>
+                <div id="nav-menu" class="hidden w-full lg:flex lg:items-center lg:w-auto">
+                    <ul class="lg:flex justify-between items-center text-sm font-semibold text-white mt-4 lg:mt-0 space-y-2 lg:space-y-0 lg:space-x-4">
+                        <li><a href="#" data-page="dashboard" class="block lg:inline-block hover:bg-white hover:text-blue-600 rounded-lg px-3 py-2 transition-colors duration-200">Dashboard</a></li>
+                        <li><a href="#" data-page="fazenda" class="block lg:inline-block hover:bg-white hover:text-blue-600 rounded-lg px-3 py-2 transition-colors duration-200">Fazenda</a></li>
+                        <li><a href="#" data-page="rebanho" class="block lg:inline-block hover:bg-white hover:text-blue-600 rounded-lg px-3 py-2 transition-colors duration-200">Rebanho</a></li>
+                        <li><a href="#" data-page="producao" class="block lg:inline-block hover:bg-white hover:text-blue-600 rounded-lg px-3 py-2 transition-colors duration-200">Produção</a></li>
+                        <li><a href="#" data-page="financeiro" class="block lg:inline-block hover:bg-white hover:text-blue-600 rounded-lg px-3 py-2 transition-colors duration-200">Financeiro</a></li>
+                        <li><a href="#" data-page="relatorios" class="block lg:inline-block hover:bg-white hover:text-blue-600 rounded-lg px-3 py-2 transition-colors duration-200">Relatórios</a></li>
+                        <li><button id="logout-btn" class="w-full text-left lg:w-auto bg-red-500 text-white rounded-lg px-3 py-2 font-semibold hover:bg-red-600 transition-colors duration-200">Sair</button></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="container mx-auto p-4 lg:p-8 flex-1">
+            <div id="content-area">
+                <!-- Conteúdo dinâmico será injetado aqui -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Login/Register Container -->
+    <div id="auth-container" class="flex items-center justify-center min-h-screen bg-gray-100 hidden">
+        <div class="card w-full max-w-sm mx-auto p-6">
+            <h2 class="text-2xl font-bold text-center mb-6">Acesse sua Conta</h2>
+            <form id="auth-form" class="space-y-4">
+                <div>
+                    <label for="auth-email" class="block text-sm font-medium text-gray-700">Email</label>
+                    <input type="email" id="auth-email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2" required>
+                </div>
+                <div>
+                    <label for="auth-password" class="block text-sm font-medium text-gray-700">Senha</label>
+                    <input type="password" id="auth-password" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2" required>
+                </div>
+                <button type="submit" id="auth-btn" class="w-full bg-blue-600 text-white rounded-lg p-3 font-semibold hover:bg-blue-700 transition-colors duration-200">Entrar</button>
+            </form>
+            <p class="mt-4 text-center text-sm text-gray-600">
+                Não tem uma conta? <a href="#" id="toggle-auth" class="text-blue-600 font-semibold hover:underline">Cadastre-se</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, onSnapshot, collection, query, where, getDocs, updateDoc, deleteDoc, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Configuration - Pre-configured with user-provided details
+        const firebaseConfig = {
+            apiKey: "AIzaSyAYiP_qK7vmNRT_kvyBK1iQD2uq6REcXfs",
+            authDomain: "rebanho-leiteiro-77821.firebaseapp.com",
+            projectId: "rebanho-leiteiro-77821",
+            storageBucket: "rebanho-leiteiro-77821.firebasestorage.app",
+            messagingSenderId: "817882752182",
+            appId: "1:817882752182:web:4efc2c4ba3b9729abcb217"
+        };
+        
+        // Global variables for Firebase and application state
+        let db, auth, userId, isAuthReady = false;
+        let appId = firebaseConfig.appId;
+        let currentPage = 'dashboard';
+        let farmData = {};
+        let animals = [];
+        let financialRecords = [];
+        let milkProduction = [];
+        let authMode = 'login'; // 'login' or 'register'
+
+        // UI elements
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const appContainer = document.getElementById('app-container');
+        const authContainer = document.getElementById('auth-container');
+        const authForm = document.getElementById('auth-form');
+        const authBtn = document.getElementById('auth-btn');
+        const toggleAuthBtn = document.getElementById('toggle-auth');
+        const contentArea = document.getElementById('content-area');
+        const modalContainer = document.getElementById('modal-container');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalCloseBtn = document.getElementById('modal-close');
+        const menuToggle = document.getElementById('menu-toggle');
+        const navMenu = document.getElementById('nav-menu');
+        const logoutBtn = document.getElementById('logout-btn');
+
+        // Function to show custom alert modal
+        function showAlert(title, message) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modalContainer.classList.remove('hidden');
+        }
+
+        // Close modal event listener
+        modalCloseBtn.addEventListener('click', () => {
+            modalContainer.classList.add('hidden');
+        });
+
+        // Mobile menu toggle
+        menuToggle.addEventListener('click', () => {
+            navMenu.classList.toggle('hidden');
+        });
+
+        // Navigation links event listener
+        document.querySelectorAll('[data-page]').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                currentPage = e.target.dataset.page;
+                renderPage();
+                navMenu.classList.add('hidden'); // Close menu on click
+            });
+        });
+
+        // Authentication form handler
+        authForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = authForm['auth-email'].value;
+            const password = authForm['auth-password'].value;
+
+            loadingSpinner.classList.remove('hidden');
+
+            try {
+                if (authMode === 'login') {
+                    await signInWithEmailAndPassword(auth, email, password);
+                } else {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                }
+                showAlert("Sucesso!", authMode === 'login' ? "Login realizado com sucesso." : "Conta criada com sucesso!");
+            } catch (error) {
+                console.error("Erro de autenticação:", error);
+                let message = "Não foi possível autenticar. Verifique seu email e senha.";
+                if (error.code === 'auth/email-already-in-use') {
+                    message = "Este email já está em uso.";
+                } else if (error.code === 'auth/invalid-email') {
+                    message = "O email inserido é inválido.";
+                } else if (error.code === 'auth/weak-password') {
+                    message = "A senha é muito fraca. Digite uma senha com pelo menos 6 caracteres.";
+                }
+                showAlert("Erro de Login", message);
+            } finally {
+                loadingSpinner.classList.add('hidden');
+            }
+        });
+
+        // Toggle between login and register
+        toggleAuthBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (authMode === 'login') {
+                authMode = 'register';
+                authBtn.textContent = 'Cadastrar';
+                toggleAuthBtn.textContent = 'Entrar';
+            } else {
+                authMode = 'login';
+                authBtn.textContent = 'Entrar';
+                toggleAuthBtn.textContent = 'Cadastre-se';
+            }
+        });
+
+        // Logout handler
+        logoutBtn.addEventListener('click', async () => {
+            try {
+                await signOut(auth);
+                showAlert("Sessão Encerrada", "Você saiu da sua conta com sucesso.");
+            } catch (error) {
+                console.error("Erro ao sair:", error);
+                showAlert("Erro", "Não foi possível sair da conta.");
+            }
+        });
+
+        // --- FIREBASE INITIALIZATION AND AUTHENTICATION ---
+        async function initializeFirebase() {
+            loadingSpinner.classList.remove('hidden');
+            
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Enable offline persistence
+                try {
+                    await enableIndexedDbPersistence(db);
+                    console.log("Firestore persistence enabled successfully!");
+                } catch (err) {
+                    if (err.code === 'failed-precondition') {
+                        console.warn("Firestore persistence could not be enabled. Is a different tab open?");
+                    } else if (err.code === 'unimplemented') {
+                        console.error("The current browser does not support offline persistence.");
+                    }
+                }
+                
+                onAuthStateChanged(auth, (user) => {
+                    loadingSpinner.classList.add('hidden');
+                    if (user) {
+                        userId = user.uid;
+                        isAuthReady = true;
+                        appContainer.classList.remove('hidden');
+                        authContainer.classList.add('hidden');
+                        setupFirestoreListeners();
+                        renderPage();
+                    } else {
+                        isAuthReady = false;
+                        userId = null;
+                        appContainer.classList.add('hidden');
+                        authContainer.classList.remove('hidden');
+                    }
+                });
+
+            } catch (error) {
+                console.error("Erro na inicialização do Firebase:", error);
+                showAlert("Erro Crítico", "Configuração inválida. Por favor, verifique os dados e tente novamente.");
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+
+        // --- FIRESTORE LISTENERS ---
+        function setupFirestoreListeners() {
+            if (!db || !userId || !appId) {
+                console.error("Database, User ID, or App ID not available for listeners.");
+                return;
+            }
+            
+            const getPrivateCollection = (collectionName) => {
+                 return collection(db, `artifacts/${appId}/users/${userId}/${collectionName}`);
+            };
+
+            // Listener for Fazenda data
+            onSnapshot(doc(db, `artifacts/${appId}/users/${userId}/farms/fazenda_data`), (docSnap) => {
+                if (docSnap.exists()) {
+                    farmData = docSnap.data();
+                } else {
+                    farmData = {};
+                }
+                if (currentPage === 'fazenda' || currentPage === 'dashboard' || currentPage === 'relatorios') renderPage();
+            });
+
+            // Listener for Animals
+            onSnapshot(getPrivateCollection('animals'), (snapshot) => {
+                animals = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                if (currentPage === 'rebanho' || currentPage === 'producao' || currentPage === 'dashboard' || currentPage === 'relatorios' || contentArea.innerHTML.includes('Detalhes da Vaca')) {
+                    renderPage();
+                }
+            });
+
+            // Listener for Milk Production
+            onSnapshot(getPrivateCollection('milkProduction'), (snapshot) => {
+                milkProduction = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                if (currentPage === 'producao' || currentPage === 'dashboard' || currentPage === 'relatorios') renderPage();
+            });
+
+            // Listener for Financial Records
+            onSnapshot(getPrivateCollection('financials'), (snapshot) => {
+                financialRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                if (currentPage === 'financeiro' || currentPage === 'dashboard' || currentPage === 'relatorios') renderPage();
+            });
+        }
+
+
+        // --- UI RENDERING FUNCTIONS ---
+        function renderPage() {
+            if (!isAuthReady) return;
+
+            switch (currentPage) {
+                case 'dashboard':
+                    renderDashboard();
+                    break;
+                case 'fazenda':
+                    renderFazendaPage();
+                    break;
+                case 'rebanho':
+                    renderRebanhoPage();
+                    break;
+                case 'producao':
+                    renderProducaoPage();
+                    break;
+                case 'financeiro':
+                    renderFinanceiroPage();
+                    break;
+                case 'relatorios':
+                    renderRelatoriosPage();
+                    break;
+                default:
+                    renderDashboard();
+                    break;
+            }
+        }
+
+        // Render Dashboard
+        function renderDashboard() {
+            const totalMilk = milkProduction.reduce((sum, record) => sum + parseFloat(record.volume), 0);
+            const totalRevenue = financialRecords.filter(f => f.type === 'receita').reduce((sum, f) => sum + parseFloat(f.value), 0);
+            const totalCosts = financialRecords.filter(f => f.type === 'custo').reduce((sum, f) => sum + parseFloat(f.value), 0);
+            const balance = totalRevenue - totalCosts;
+
+            const cowAlerts = animals.filter(cow => {
+                const today = new Date();
+                // Check for calving alert (due within 30 days)
+                if (cow.previsaoParto) {
+                    const calvingDate = new Date(cow.previsaoParto);
+                    const diffDays = Math.ceil((calvingDate - today) / (1000 * 60 * 60 * 24));
+                    if (diffDays <= 30 && diffDays > 0) return true;
+                }
+                // Check for estrus alert (assuming a 21-day cycle after last calving)
+                if (cow.dataUltimoParto) {
+                    const lastCalving = new Date(cow.dataUltimoParto);
+                    const diffDays = Math.ceil((today - lastCalving) / (1000 * 60 * 60 * 24));
+                    if (diffDays > 0 && diffDays % 21 < 5) return true;
+                }
+                // Check for vaccination alerts (due within 30 days)
+                if (cow.saude?.vacinas?.length > 0) {
+                    return cow.saude.vacinas.some(vac => {
+                        const nextVacDate = new Date(vac.proximaData);
+                        const diffDays = Math.ceil((nextVacDate - today) / (1000 * 60 * 60 * 24));
+                        return diffDays <= 30 && diffDays > 0;
+                    });
+                }
+                return false;
+            });
+            
+            const alertsHtml = cowAlerts.length > 0 ?
+                `<div class="card p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700">
+                    <p class="font-bold">Atenção!</p>
+                    <ul class="list-disc ml-5">
+                        ${cowAlerts.map(cow => `<li>Vaca #${cow.brinco} - Próxima ao parto ou no cio.</li>`).join('')}
+                    </ul>
+                </div>` : '';
+
+            contentArea.innerHTML = `
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="card text-center bg-blue-500 text-white p-6">
+                        <h2 class="text-2xl font-bold">${totalMilk.toFixed(2)} L</h2>
+                        <p class="text-sm opacity-80">Produção de Leite (Total)</p>
+                    </div>
+                    <div class="card text-center bg-green-500 text-white p-6">
+                        <h2 class="text-2xl font-bold">R$ ${balance.toFixed(2)}</h2>
+                        <p class="text-sm opacity-80">Lucratividade</p>
+                    </div>
+                    <div class="card text-center bg-purple-500 text-white p-6">
+                        <h2 class="text-2xl font-bold">${animals.length}</h2>
+                        <p class="text-sm opacity-80">Animais no Rebanho</p>
+                    </div>
+                    <div class="card text-center bg-red-500 text-white p-6">
+                        <h2 class="text-2xl font-bold">${cowAlerts.length}</h2>
+                        <p class="text-sm opacity-80">Alertas Ativos</p>
+                    </div>
+                </div>
+                ${alertsHtml}
+                <div class="grid lg:grid-cols-2 gap-6">
+                    <div class="card p-6">
+                        <h2 class="text-xl font-bold mb-4">Relatório de Produção (Últimos 30 dias)</h2>
+                        <p>Gráfico ou tabela aqui...</p>
+                    </div>
+                    <div class="card p-6">
+                        <h2 class="text-xl font-bold mb-4">Relatório Financeiro (Último Mês)</h2>
+                        <p>Gráfico de receitas vs. custos aqui...</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Render Fazenda page
+        function renderFazendaPage() {
+            contentArea.innerHTML = `
+                <div class="card">
+                    <h1 class="text-2xl font-bold mb-6">Informações da Fazenda</h1>
+                    <form id="fazenda-form" class="space-y-4">
+                        <div>
+                            <label for="nome" class="block text-sm font-medium text-gray-700">Nome da Fazenda</label>
+                            <input type="text" id="nome" name="nome" value="${farmData.nome || ''}" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <div>
+                            <label for="localizacao" class="block text-sm font-medium text-gray-700">Localização</label>
+                            <input type="text" id="localizacao" name="localizacao" value="${farmData.localizacao || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <div>
+                            <label for="areaTotal" class="block text-sm font-medium text-gray-700">Área Total (ha)</label>
+                            <input type="number" id="areaTotal" name="areaTotal" value="${farmData.areaTotal || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <div>
+                            <label for="areaPastagem" class="block text-sm font-medium text-gray-700">Área de Pastagem (ha)</label>
+                            <input type="number" id="areaPastagem" name="areaPastagem" value="${farmData.areaPastagem || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
+                        </div>
+                        <button type="submit" class="w-full bg-blue-600 text-white rounded-lg p-3 font-semibold hover:bg-blue-700 transition-colors duration-200">Salvar Informações</button>
+                    </form>
+                </div>
+            `;
+            document.getElementById('fazenda-form').addEventListener('submit', handleFazendaFormSubmit);
+        }
+
+        // Handle Fazenda form submission
+        async function handleFazendaFormSubmit(e) {
+            e.preventDefault();
+            const form = e.target;
+            const data = {
+                nome: form.nome.value,
+                localizacao: form.localizacao.value,
+                areaTotal: parseFloat(form.areaTotal.value),
+                areaPastagem: parseFloat(form.areaPastagem.value),
+                updatedAt: new Date()
+            };
+            const docRef = doc(db, `artifacts/${appId}/users/${userId}/farms/fazenda_data`);
+            await setDoc(docRef, data, { merge: true });
+            showAlert("Sucesso!", "Dados da fazenda salvos com sucesso.");
+        }
+
+        // Render Rebanho page
+        function renderRebanhoPage() {
+            const animalsHtml = animals.map(cow => `
+                <div class="card flex flex-col sm:flex-row justify-between items-center p-4">
+                    <div class="flex-1 mb-2 sm:mb-0">
+                        <h3 class="text-xl font-bold text-gray-800">Vaca #${cow.brinco}</h3>
+                        <p class="text-sm text-gray-500">Raça: ${cow.raca} | Nascimento: ${cow.dataNascimento}</p>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button onclick="viewAnimal('${cow.id}')" class="bg-blue-500 text-white p-2 rounded-lg text-sm hover:bg-blue-600 transition-colors duration-200">Ver Detalhes</button>
+                    </div>
+                </div>
+            `).join('');
+
+            contentArea.innerHTML = `
+                <div class="card">
+                    <div class="flex flex-col sm:flex-row justify-between items-center mb-6">
+                        <h1 class="text-2xl font-bold mb-4 sm:mb-0">Controle do Rebanho</h1>
+                        <button id="add-animal-btn" class="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors duration-200">Adicionar Vaca</button>
+                    </div>
+                    <div id="animal-list" class="space-y-4">
+                        ${animals.length > 0 ? animalsHtml : '<p class="text-center text-gray-500">Nenhuma vaca cadastrada.</p>'}
+                    </div>
+                    <div id="animal-form-container" class="mt-8 hidden"></div>
+                </div>
+            `;
+            document.getElementById('add-animal-btn').addEventListener('click', () => renderAnimalForm());
+        }
+
+        // Render form to add/edit animal
+        function renderAnimalForm(cow = {}) {
+            const formContainer = document.getElementById('animal-form-container');
+            formContainer.classList.remove('hidden');
+            formContainer.innerHTML = `
+                <div class="card p-6">
+                    <h2 class="text-xl font-bold mb-4">${cow.id ? 'Editar Vaca' : 'Adicionar Nova Vaca'}</h2>
+                    <form id="animal-form" class="space-y-4">
+                        <input type="hidden" id="animal-id" value="${cow.id || ''}">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Identificação (Brinco/Chip)</label>
+                            <input type="text" id="brinco" name="brinco" value="${cow.brinco || ''}" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Raça</label>
+                            <input type="text" id="raca" name="raca" value="${cow.raca || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Data de Nascimento</label>
+                            <input type="date" id="dataNascimento" name="dataNascimento" value="${cow.dataNascimento || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Peso (kg)</label>
+                            <input type="number" step="0.1" id="peso" name="peso" value="${cow.peso || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Origem</label>
+                            <input type="text" id="origem" name="origem" value="${cow.origem || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                        </div>
+                        <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
+                            <button type="submit" class="bg-blue-600 text-white p-3 rounded-lg font-semibold flex-1 hover:bg-blue-700">Salvar</button>
+                            <button type="button" onclick="cancelForm()" class="bg-gray-400 text-white p-3 rounded-lg font-semibold flex-1 hover:bg-gray-500">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            document.getElementById('animal-form').addEventListener('submit', handleAnimalFormSubmit);
+        }
+
+        // Handle animal form submission
+        async function handleAnimalFormSubmit(e) {
+            e.preventDefault();
+            const form = e.target;
+            const animalId = form['animal-id'].value;
+            const data = {
+                brinco: form.brinco.value,
+                raca: form.raca.value,
+                dataNascimento: form.dataNascimento.value,
+                peso: parseFloat(form.peso.value),
+                origem: form.origem.value,
+                updatedAt: new Date()
+            };
+
+            try {
+                if (animalId) {
+                    const docRef = doc(db, `artifacts/${appId}/users/${userId}/animals`, animalId);
+                    await updateDoc(docRef, data);
+                    showAlert("Sucesso!", "Dados do animal atualizados.");
+                } else {
+                    await addDoc(collection(db, `artifacts/${appId}/users/${userId}/animals`), data);
+                    showAlert("Sucesso!", "Nova vaca adicionada.");
+                }
+                document.getElementById('animal-form-container').classList.add('hidden');
+            } catch (error) {
+                console.error("Erro ao salvar animal:", error);
+                showAlert("Erro", "Não foi possível salvar os dados do animal.");
+            }
+        }
+        
+        // This function is defined globally to be called from the HTML
+        window.viewAnimal = function(animalId) {
+            const cow = animals.find(a => a.id === animalId);
+            if (!cow) {
+                showAlert("Erro", "Animal não encontrado.");
+                return;
+            }
+
+            contentArea.innerHTML = `
+                <div class="card">
+                    <div class="flex flex-col sm:flex-row justify-between items-center mb-6">
+                        <h1 class="text-2xl font-bold mb-4 sm:mb-0">Detalhes da Vaca #${cow.brinco}</h1>
+                        <button onclick="renderRebanhoPage()" class="w-full sm:w-auto bg-gray-400 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-500 transition-colors duration-200">Voltar</button>
+                    </div>
+                    <div class="space-y-4">
+                        <p><strong>Identificação:</strong> ${cow.brinco}</p>
+                        <p><strong>Raça:</strong> ${cow.raca || 'N/A'}</p>
+                        <p><strong>Data de Nascimento:</strong> ${cow.dataNascimento || 'N/A'}</p>
+                        <p><strong>Peso:</strong> ${cow.peso ? cow.peso + ' kg' : 'N/A'}</p>
+                    </div>
+
+                    <div class="mt-8">
+                        <h2 class="text-xl font-bold mb-4">Controle Reprodutivo</h2>
+                        <form id="reproducao-form" class="space-y-4">
+                            <input type="hidden" name="animalId" value="${cow.id}">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Data da Cobertura/Inseminação</label>
+                                <input type="date" name="coberturaData" value="${cow.reproducao?.coberturaData || ''}" class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Previsão de Parto</label>
+                                <input type="date" name="previsaoParto" value="${cow.reproducao?.previsaoParto || ''}" class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Histórico de Partos</label>
+                                <textarea name="historicoPartos" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${cow.reproducao?.historicoPartos || ''}</textarea>
+                            </div>
+                            <button type="submit" class="w-full bg-blue-600 text-white rounded-lg p-3 font-semibold hover:bg-blue-700">Salvar Reprodutivo</button>
+                        </form>
+                    </div>
+
+                    <div class="mt-8">
+                        <h2 class="text-xl font-bold mb-4">Saúde e Bem-estar</h2>
+                        <form id="saude-form" class="space-y-4">
+                            <input type="hidden" name="animalId" value="${cow.id}">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Histórico de Vacinas</label>
+                                <textarea name="vacinas" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${cow.saude?.vacinas || ''}</textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Ocorrências Clínicas</label>
+                                <textarea name="ocorrenciasClinicas" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${cow.saude?.ocorrenciasClinicas || ''}</textarea>
+                            </div>
+                            <button type="submit" class="w-full bg-blue-600 text-white rounded-lg p-3 font-semibold hover:bg-blue-700">Salvar Saúde</button>
+                        </form>
+                    </div>
+
+                    <div class="mt-8">
+                        <h2 class="text-xl font-bold mb-4">Alimentação e Nutrição</h2>
+                        <form id="alimentacao-form" class="space-y-4">
+                            <input type="hidden" name="animalId" value="${cow.id}">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Dieta Fornecida</label>
+                                <textarea name="dieta" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${cow.alimentacao?.dieta || ''}</textarea>
+                            </div>
+                            <button type="submit" class="w-full bg-blue-600 text-white rounded-lg p-3 font-semibold hover:bg-blue-700">Salvar Alimentação</button>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.getElementById('reproducao-form').addEventListener('submit', handleReproducaoFormSubmit);
+            document.getElementById('saude-form').addEventListener('submit', handleSaudeFormSubmit);
+            document.getElementById('alimentacao-form').addEventListener('submit', handleAlimentacaoFormSubmit);
+        }
+
+        async function handleReproducaoFormSubmit(e) {
+            e.preventDefault();
+            const form = e.target;
+            const animalId = form.animalId.value;
+            const data = {
+                reproducao: {
+                    coberturaData: form.coberturaData.value,
+                    previsaoParto: form.previsaoParto.value,
+                    historicoPartos: form.historicoPartos.value
+                }
+            };
+            const docRef = doc(db, `artifacts/${appId}/users/${userId}/animals`, animalId);
+            await updateDoc(docRef, data, { merge: true });
+            showAlert("Sucesso!", "Dados reprodutivos salvos.");
+        }
+
+        async function handleSaudeFormSubmit(e) {
+            e.preventDefault();
+            const form = e.target;
+            const animalId = form.animalId.value;
+            const data = {
+                saude: {
+                    vacinas: form.vacinas.value,
+                    ocorrenciasClinicas: form.ocorrenciasClinicas.value
+                }
+            };
+            const docRef = doc(db, `artifacts/${appId}/users/${userId}/animals`, animalId);
+            await updateDoc(docRef, data, { merge: true });
+            showAlert("Sucesso!", "Dados de saúde salvos.");
+        }
+
+        async function handleAlimentacaoFormSubmit(e) {
+            e.preventDefault();
+            const form = e.target;
+            const animalId = form.animalId.value;
+            const data = {
+                alimentacao: {
+                    dieta: form.dieta.value
+                }
+            };
+            const docRef = doc(db, `artifacts/${appId}/users/${userId}/animals`, animalId);
+            await updateDoc(docRef, data, { merge: true });
+            showAlert("Sucesso!", "Dados de alimentação salvos.");
+        }
+
+        // Function to render Milk Production page
+        function renderProducaoPage() {
+            const totalMilk = milkProduction.reduce((sum, record) => sum + parseFloat(record.volume), 0);
+            const today = new Date().toISOString().split('T')[0];
+            const milkRecordsHtml = milkProduction.sort((a,b) => new Date(b.data) - new Date(a.data)).map(record => `
+                <li class="bg-gray-50 p-3 rounded-lg flex flex-col sm:flex-row justify-between items-center">
+                    <span>${record.data} - ${record.volume} L</span>
+                    <span>Vaca: #${record.cowBrinco}</span>
+                </li>
+            `).join('');
+
+            contentArea.innerHTML = `
+                <div class="card">
+                    <h1 class="text-2xl font-bold mb-6">Controle de Produção de Leite</h1>
+                    <div class="flex flex-col sm:flex-row justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold mb-4 sm:mb-0">Produção Diária</h2>
+                        <button id="add-milk-record-btn" class="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors duration-200">Registrar Produção</button>
+                    </div>
+                    <form id="milk-form" class="hidden mb-6 card p-4">
+                        <h3 class="font-bold mb-2">Novo Registro</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Data</label>
+                                <input type="date" id="milk-date" value="${today}" class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Vaca</label>
+                                <select id="milk-cow-select" class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                                    ${animals.map(cow => `<option value="${cow.brinco}">Vaca #${cow.brinco}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Volume (L)</label>
+                                <input type="number" step="0.01" id="milk-volume" required class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                            </div>
+                        </div>
+                        <div class="mt-4 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                            <button type="submit" class="bg-blue-600 text-white p-2 rounded-lg font-semibold flex-1 hover:bg-blue-700">Salvar</button>
+                            <button type="button" onclick="document.getElementById('milk-form').classList.add('hidden')" class="bg-gray-400 text-white p-2 rounded-lg font-semibold flex-1 hover:bg-gray-500">Cancelar</button>
+                        </div>
+                    </form>
+                    <ul class="space-y-2 max-h-96 overflow-y-auto">
+                        ${milkProduction.length > 0 ? milkRecordsHtml : '<p class="text-center text-gray-500">Nenhum registro de produção.</p>'}
+                    </ul>
+                </div>
+            `;
+            document.getElementById('add-milk-record-btn').addEventListener('click', () => {
+                document.getElementById('milk-form').classList.remove('hidden');
+            });
+            document.getElementById('milk-form').addEventListener('submit', handleMilkFormSubmit);
+        }
+
+        async function handleMilkFormSubmit(e) {
+            e.preventDefault();
+            const data = {
+                data: document.getElementById('milk-date').value,
+                cowBrinco: document.getElementById('milk-cow-select').value,
+                volume: parseFloat(document.getElementById('milk-volume').value),
+                createdAt: new Date()
+            };
+            await addDoc(collection(db, `artifacts/${appId}/users/${userId}/milkProduction`), data);
+            showAlert("Sucesso!", "Produção de leite registrada.");
+            document.getElementById('milk-form').reset();
+            document.getElementById('milk-form').classList.add('hidden');
+        }
+
+        // Function to render Financeiro page
+        function renderFinanceiroPage() {
+            const totalRevenue = financialRecords.filter(f => f.type === 'receita').reduce((sum, f) => sum + parseFloat(f.value), 0);
+            const totalCosts = financialRecords.filter(f => f.type === 'custo').reduce((sum, f) => sum + parseFloat(f.value), 0);
+            const balance = totalRevenue - totalCosts;
+
+            const recordsHtml = financialRecords.sort((a, b) => new Date(b.data) - new Date(a.data)).map(record => `
+                <li class="bg-gray-50 p-3 rounded-lg flex flex-col sm:flex-row justify-between items-center ${record.type === 'custo' ? 'text-red-500' : 'text-green-500'}">
+                    <div class="flex-1 mb-2 sm:mb-0">
+                        <span class="font-bold">${record.descricao}</span>
+                        <span class="text-sm text-gray-500 sm:ml-2">(${record.data})</span>
+                    </div>
+                    <span class="font-semibold text-lg">R$ ${parseFloat(record.value).toFixed(2)}</span>
+                </li>
+            `).join('');
+
+            contentArea.innerHTML = `
+                <div class="card">
+                    <h1 class="text-2xl font-bold mb-6">Controle Financeiro</h1>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                        <div class="card p-4 text-center bg-green-100 text-green-700">
+                            <p class="text-sm">Receitas</p>
+                            <p class="font-bold text-lg">R$ ${totalRevenue.toFixed(2)}</p>
+                        </div>
+                        <div class="card p-4 text-center bg-red-100 text-red-700">
+                            <p class="text-sm">Custos</p>
+                            <p class="font-bold text-lg">R$ ${totalCosts.toFixed(2)}</p>
+                        </div>
+                        <div class="card p-4 text-center ${balance >= 0 ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}">
+                            <p class="text-sm">Saldo</p>
+                            <p class="font-bold text-lg">R$ ${balance.toFixed(2)}</p>
+                        </div>
+                    </div>
+                    <button id="add-finance-record-btn" class="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded-lg font-semibold mb-6 hover:bg-green-700 transition-colors duration-200">Novo Lançamento</button>
+                    <form id="finance-form" class="hidden mb-6 card p-4">
+                        <h3 class="font-bold mb-2">Novo Lançamento</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Tipo</label>
+                                <select id="finance-type" required class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                                    <option value="receita">Receita</option>
+                                    <option value="custo">Custo</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Valor (R$)</label>
+                                <input type="number" step="0.01" id="finance-value" required class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Descrição</label>
+                                <input type="text" id="finance-desc" required class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Data</label>
+                                <input type="date" id="finance-date" value="${new Date().toISOString().split('T')[0]}" required class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                            </div>
+                        </div>
+                        <div class="mt-4 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                            <button type="submit" class="bg-blue-600 text-white p-2 rounded-lg font-semibold flex-1 hover:bg-blue-700">Salvar</button>
+                            <button type="button" onclick="document.getElementById('finance-form').classList.add('hidden')" class="bg-gray-400 text-white p-2 rounded-lg font-semibold flex-1 hover:bg-gray-500">Cancelar</button>
+                        </div>
+                    </form>
+                    <ul class="space-y-2 max-h-96 overflow-y-auto">
+                        ${financialRecords.length > 0 ? recordsHtml : '<p class="text-center text-gray-500">Nenhum registro financeiro.</p>'}
+                    </ul>
+                </div>
+            `;
+            document.getElementById('add-finance-record-btn').addEventListener('click', () => {
+                document.getElementById('finance-form').classList.remove('hidden');
+            });
+            document.getElementById('finance-form').addEventListener('submit', handleFinanceFormSubmit);
+        }
+
+        async function handleFinanceFormSubmit(e) {
+            e.preventDefault();
+            const data = {
+                type: document.getElementById('finance-type').value,
+                value: parseFloat(document.getElementById('finance-value').value),
+                descricao: document.getElementById('finance-desc').value,
+                data: document.getElementById('finance-date').value,
+                createdAt: new Date()
+            };
+            await addDoc(collection(db, `artifacts/${appId}/users/${userId}/financials`), data);
+            showAlert("Sucesso!", "Lançamento financeiro registrado.");
+            document.getElementById('finance-form').reset();
+            document.getElementById('finance-form').classList.add('hidden');
+        }
+
+        function renderRelatoriosPage() {
+            // Data for milk production chart
+            const milkDataByMonth = milkProduction.reduce((acc, record) => {
+                const date = new Date(record.data);
+                const month = date.getMonth();
+                const year = date.getFullYear();
+                const key = `${year}-${month + 1}`;
+                acc[key] = (acc[key] || 0) + parseFloat(record.volume);
+                return acc;
+            }, {});
+            const sortedMonths = Object.keys(milkDataByMonth).sort();
+            const milkLabels = sortedMonths.map(key => {
+                const [year, month] = key.split('-');
+                return `${month}/${year}`;
+            });
+            const milkVolumes = sortedMonths.map(key => milkDataByMonth[key]);
+
+            // Data for financial chart
+            const financialDataByMonth = financialRecords.reduce((acc, record) => {
+                const date = new Date(record.data);
+                const month = date.getMonth();
+                const year = date.getFullYear();
+                const key = `${year}-${month + 1}`;
+                if (record.type === 'receita') {
+                    acc[key] = { receita: (acc[key]?.receita || 0) + parseFloat(record.value), custo: acc[key]?.custo || 0 };
+                } else {
+                    acc[key] = { receita: acc[key]?.receita || 0, custo: (acc[key]?.custo || 0) + parseFloat(record.value) };
+                }
+                return acc;
+            }, {});
+            const sortedFinancialMonths = Object.keys(financialDataByMonth).sort();
+            const financialLabels = sortedFinancialMonths.map(key => {
+                const [year, month] = key.split('-');
+                return `${month}/${year}`;
+            });
+            const revenues = sortedFinancialMonths.map(key => financialDataByMonth[key].receita);
+            const costs = sortedFinancialMonths.map(key => financialDataByMonth[key].custo);
+
+            // Ranking das vacas mais produtivas
+            const productionByCow = milkProduction.reduce((acc, record) => {
+                acc[record.cowBrinco] = (acc[record.cowBrinco] || 0) + parseFloat(record.volume);
+                return acc;
+            }, {});
+            const sortedCows = Object.entries(productionByCow).sort((a,b) => b[1] - a[1]);
+            const rankingHtml = sortedCows.map(([brinco, volume], index) => `
+                <li class="bg-gray-50 p-3 rounded-lg flex justify-between items-center">
+                    <span>${index + 1}. Vaca #${brinco}</span>
+                    <span class="font-semibold">${volume.toFixed(2)} L</span>
+                </li>
+            `).join('');
+
+            contentArea.innerHTML = `
+                <div class="card">
+                    <h1 class="text-2xl font-bold mb-6">Relatórios e Indicadores</h1>
+                    
+                    <div class="card">
+                        <h2 class="text-xl font-bold mb-4">Produção de Leite por Mês</h2>
+                        <canvas id="milkChart"></canvas>
+                    </div>
+
+                    <div class="card">
+                        <h2 class="text-xl font-bold mb-4">Relatório Financeiro por Mês</h2>
+                        <canvas id="financeChart"></canvas>
+                    </div>
+
+                    <div class="card">
+                        <h2 class="text-xl font-bold mb-4">Ranking de Vacas Produtivas</h2>
+                        <ul class="space-y-2 max-h-96 overflow-y-auto">
+                           ${rankingHtml || '<p class="text-center text-gray-500">Nenhum dado de produção disponível para o ranking.</p>'}
+                        </ul>
+                    </div>
+                </div>
+            `;
+            
+            // Render the charts
+            new Chart(document.getElementById('milkChart'), {
+                type: 'bar',
+                data: {
+                    labels: milkLabels,
+                    datasets: [{
+                        label: 'Produção Total de Leite (L)',
+                        data: milkVolumes,
+                        backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            });
+
+            new Chart(document.getElementById('financeChart'), {
+                type: 'line',
+                data: {
+                    labels: financialLabels,
+                    datasets: [
+                        {
+                            label: 'Receitas (R$)',
+                            data: revenues,
+                            borderColor: 'rgba(16, 185, 129, 1)',
+                            backgroundColor: 'rgba(16, 185, 129, 0.5)',
+                        },
+                        {
+                            label: 'Custos (R$)',
+                            data: costs,
+                            borderColor: 'rgba(239, 68, 68, 1)',
+                            backgroundColor: 'rgba(239, 68, 68, 0.5)',
+                        }
+                    ]
+                },
+                options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            });
+        }
+
+        // Function to handle form cancellation
+        window.cancelForm = function() {
+            document.getElementById('animal-form-container').classList.add('hidden');
+        };
+
+        // --- INITIALIZE APPLICATION ---
+        window.onload = initializeFirebase;
+    </script>
+</body>
+
+</html>
+
