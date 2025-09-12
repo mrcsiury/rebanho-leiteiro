@@ -73,8 +73,8 @@
                 <div id="nav-menu" class="hidden w-full lg:flex lg:items-center lg:w-auto">
                     <ul class="lg:flex justify-between items-center text-sm font-semibold text-white mt-4 lg:mt-0 space-y-2 lg:space-y-0 lg:space-x-4">
                         <li><a href="#" data-page="dashboard" class="block lg:inline-block hover:bg-white hover:text-blue-600 rounded-lg px-3 py-2 transition-colors duration-200">Dashboard</a></li>
-                        <li><a href="#" data-page="fazenda" class="block lg:inline-block hover:bg-white hover:text-blue-600 rounded-lg px-3 py-2 transition-colors duration-200">Fazenda</a></li>
-                        <li><a href="#" data-page="rebanho" class="block lg:inline-block hover:bg-white hover:text-blue-600 rounded-lg px-3 py-2 transition-colors duration-200">Rebanho</a></li>
+                        <li><a href="#" data-page="fazendas" class="block lg:inline-block hover:bg-white hover:text-blue-600 rounded-lg px-3 py-2 transition-colors duration-200">Fazendas</a></li>
+                        <li><a href="#" data-page="animais" class="block lg:inline-block hover:bg-white hover:text-blue-600 rounded-lg px-3 py-2 transition-colors duration-200">Animais</a></li>
                         <li><a href="#" data-page="producao" class="block lg:inline-block hover:bg-white hover:text-blue-600 rounded-lg px-3 py-2 transition-colors duration-200">Produção</a></li>
                         <li><a href="#" data-page="financeiro" class="block lg:inline-block hover:bg-white hover:text-blue-600 rounded-lg px-3 py-2 transition-colors duration-200">Financeiro</a></li>
                         <li><a href="#" data-page="relatorios" class="block lg:inline-block hover:bg-white hover:text-blue-600 rounded-lg px-3 py-2 transition-colors duration-200">Relatórios</a></li>
@@ -87,7 +87,7 @@
         <!-- Main Content Area -->
         <main class="container mx-auto p-4 lg:p-8 flex-1">
             <div id="content-area">
-                <!-- Conteúdo dinâmico será injetado aqui -->
+                <!-- Dynamic content will be injected here -->
             </div>
         </main>
     </div>
@@ -133,11 +133,12 @@
         let db, auth, userId, isAuthReady = false;
         let appId = firebaseConfig.appId;
         let currentPage = 'dashboard';
-        let farmData = {};
+        let farms = [];
         let animals = [];
         let financialRecords = [];
         let milkProduction = [];
         let authMode = 'login'; // 'login' or 'register'
+        let dashboardChart = null;
 
         // UI elements
         const loadingSpinner = document.getElementById('loading-spinner');
@@ -154,6 +155,9 @@
         const menuToggle = document.getElementById('menu-toggle');
         const navMenu = document.getElementById('nav-menu');
         const logoutBtn = document.getElementById('logout-btn');
+
+        // Brazilian States
+        const states = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
 
         // Function to show custom alert modal
         function showAlert(title, message) {
@@ -196,18 +200,17 @@
                 } else {
                     await createUserWithEmailAndPassword(auth, email, password);
                 }
-                showAlert("Sucesso!", authMode === 'login' ? "Login realizado com sucesso." : "Conta criada com sucesso!");
             } catch (error) {
-                console.error("Erro de autenticação:", error);
-                let message = "Não foi possível autenticar. Verifique seu email e senha.";
+                console.error("Authentication error:", error);
+                let message = "Could not authenticate. Check your email and password.";
                 if (error.code === 'auth/email-already-in-use') {
-                    message = "Este email já está em uso.";
+                    message = "This email is already in use.";
                 } else if (error.code === 'auth/invalid-email') {
-                    message = "O email inserido é inválido.";
+                    message = "The email entered is invalid.";
                 } else if (error.code === 'auth/weak-password') {
-                    message = "A senha é muito fraca. Digite uma senha com pelo menos 6 caracteres.";
+                    message = "The password is too weak. Enter a password with at least 6 characters.";
                 }
-                showAlert("Erro de Login", message);
+                showAlert("Login Error", message);
             } finally {
                 loadingSpinner.classList.add('hidden');
             }
@@ -230,11 +233,10 @@
         // Logout handler
         logoutBtn.addEventListener('click', async () => {
             try {
-                await signOut(auth);
-                showAlert("Sessão Encerrada", "Você saiu da sua conta com sucesso.");
+                await signOut(auth);                
             } catch (error) {
-                console.error("Erro ao sair:", error);
-                showAlert("Erro", "Não foi possível sair da conta.");
+                console.error("Error signing out:", error);
+                showAlert("Error", "Could not sign out of the account.");
             }
         });
 
@@ -277,8 +279,8 @@
                 });
 
             } catch (error) {
-                console.error("Erro na inicialização do Firebase:", error);
-                showAlert("Erro Crítico", "Configuração inválida. Por favor, verifique os dados e tente novamente.");
+                console.error("Firebase initialization error:", error);
+                showAlert("Critical Error", "Invalid configuration. Please check the data and try again.");
                 loadingSpinner.classList.add('hidden');
             }
         }
@@ -294,20 +296,16 @@
                  return collection(db, `artifacts/${appId}/users/${userId}/${collectionName}`);
             };
 
-            // Listener for Fazenda data
-            onSnapshot(doc(db, `artifacts/${appId}/users/${userId}/farms/fazenda_data`), (docSnap) => {
-                if (docSnap.exists()) {
-                    farmData = docSnap.data();
-                } else {
-                    farmData = {};
-                }
-                if (currentPage === 'fazenda' || currentPage === 'dashboard' || currentPage === 'relatorios') renderPage();
+            // Listener for Fazendas
+            onSnapshot(getPrivateCollection('farms'), (snapshot) => {
+                farms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                if (currentPage === 'fazendas' || currentPage === 'animais' || currentPage === 'dashboard' || currentPage === 'relatorios') renderPage();
             });
 
             // Listener for Animals
             onSnapshot(getPrivateCollection('animals'), (snapshot) => {
                 animals = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                if (currentPage === 'rebanho' || currentPage === 'producao' || currentPage === 'dashboard' || currentPage === 'relatorios' || contentArea.innerHTML.includes('Detalhes da Vaca')) {
+                if (currentPage === 'animais' || currentPage === 'producao' || currentPage === 'dashboard' || currentPage === 'relatorios' || contentArea.innerHTML.includes('Detalhes do Animal')) {
                     renderPage();
                 }
             });
@@ -334,11 +332,11 @@
                 case 'dashboard':
                     renderDashboard();
                     break;
-                case 'fazenda':
-                    renderFazendaPage();
+                case 'fazendas':
+                    renderFazendasPage();
                     break;
-                case 'rebanho':
-                    renderRebanhoPage();
+                case 'animais':
+                    renderAnimaisPage();
                     break;
                 case 'producao':
                     renderProducaoPage();
@@ -357,28 +355,36 @@
 
         // Render Dashboard
         function renderDashboard() {
-            const totalMilk = milkProduction.reduce((sum, record) => sum + parseFloat(record.volume), 0);
+            const today = new Date();
+            const currentYear = today.getFullYear();
+            const currentMonth = today.getMonth() + 1;
+            const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+            const totalMilk = milkProduction.reduce((sum, record) => {
+                const volume = parseFloat(record.volumeGeral);
+                 return sum + (isNaN(volume) ? 0 : volume);
+            }, 0);
             const totalRevenue = financialRecords.filter(f => f.type === 'receita').reduce((sum, f) => sum + parseFloat(f.value), 0);
             const totalCosts = financialRecords.filter(f => f.type === 'custo').reduce((sum, f) => sum + parseFloat(f.value), 0);
             const balance = totalRevenue - totalCosts;
 
-            const cowAlerts = animals.filter(cow => {
+            const animalAlerts = animals.filter(animal => {
                 const today = new Date();
-                // Check for calving alert (due within 30 days)
-                if (cow.previsaoParto) {
-                    const calvingDate = new Date(cow.previsaoParto);
+                // Check for calving alert (due within 30 days, for females only)
+                if (animal.sexo === 'Fêmea' && animal.previsaoParto) {
+                    const calvingDate = new Date(animal.previsaoParto);
                     const diffDays = Math.ceil((calvingDate - today) / (1000 * 60 * 60 * 24));
                     if (diffDays <= 30 && diffDays > 0) return true;
                 }
-                // Check for estrus alert (assuming a 21-day cycle after last calving)
-                if (cow.dataUltimoParto) {
-                    const lastCalving = new Date(cow.dataUltimoParto);
+                // Check for estrus alert (assuming a 21-day cycle after last calving, for females)
+                if (animal.sexo === 'Fêmea' && animal.dataUltimoParto) {
+                    const lastCalving = new Date(animal.dataUltimoParto);
                     const diffDays = Math.ceil((today - lastCalving) / (1000 * 60 * 60 * 24));
                     if (diffDays > 0 && diffDays % 21 < 5) return true;
                 }
                 // Check for vaccination alerts (due within 30 days)
-                if (cow.saude?.vacinas?.length > 0) {
-                    return cow.saude.vacinas.some(vac => {
+                if (animal.saude?.vacinas?.length > 0) {
+                    return animal.saude.vacinas.some(vac => {
                         const nextVacDate = new Date(vac.proximaData);
                         const diffDays = Math.ceil((nextVacDate - today) / (1000 * 60 * 60 * 24));
                         return diffDays <= 30 && diffDays > 0;
@@ -386,15 +392,21 @@
                 }
                 return false;
             });
-            
-            const alertsHtml = cowAlerts.length > 0 ?
-                `<div class="card p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700">
-                    <p class="font-bold">Atenção!</p>
-                    <ul class="list-disc ml-5">
-                        ${cowAlerts.map(cow => `<li>Vaca #${cow.brinco} - Próxima ao parto ou no cio.</li>`).join('')}
-                    </ul>
-                </div>` : '';
+            const lactatingAnimals = animals.filter(a => a.emLactacao).length;
 
+            const animalsHtml = animals.map(animal => {
+                const farm = farms.find(f => f.id === animal.fazendaId);
+                const farmName = farm ? farm.nome : 'N/A';
+                return `
+                    <li class="bg-white p-4 rounded-lg shadow-sm flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
+                        <div class="flex-1 text-center sm:text-left">
+                            <h3 class="font-bold text-gray-800">#${animal.brinco} - ${animal.nome || 'Sem Nome'}</h3>
+                            <p class="text-sm text-gray-500">Fazenda: ${farmName} | Sexo: ${animal.sexo} | Raça: ${animal.raca}</p>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+            
             contentArea.innerHTML = `
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                     <div class="card text-center bg-blue-500 text-white p-6">
@@ -409,80 +421,126 @@
                         <h2 class="text-2xl font-bold">${animals.length}</h2>
                         <p class="text-sm opacity-80">Animais no Rebanho</p>
                     </div>
+                    <div class="card text-center bg-pink-500 text-white p-6">
+                        <h2 class="text-2xl font-bold">${lactatingAnimals}</h2>
+                        <p class="text-sm opacity-80">Em Lactação</p>
+                    </div>
                     <div class="card text-center bg-red-500 text-white p-6">
-                        <h2 class="text-2xl font-bold">${cowAlerts.length}</h2>
+                        <h2 class="text-2xl font-bold">${animalAlerts.length}</h2>
                         <p class="text-sm opacity-80">Alertas Ativos</p>
                     </div>
                 </div>
-                ${alertsHtml}
-                <div class="grid lg:grid-cols-2 gap-6">
-                    <div class="card p-6">
-                        <h2 class="text-xl font-bold mb-4">Relatório de Produção (Últimos 30 dias)</h2>
-                        <p>Gráfico ou tabela aqui...</p>
+                ${animalAlerts.length > 0 ?
+                `<div class="card p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700">
+                    <p class="font-bold">Atenção!</p>
+                    <ul class="list-disc ml-5">
+                        ${animalAlerts.map(animal => `<li>Animal #${animal.brinco} - ${animal.sexo === 'Fêmea' ? 'Próxima ao parto ou no cio.' : 'Vacinação pendente.'}</li>`).join('')}
+                    </ul>
+                </div>` : ''}
+
+                <div class="card p-6">
+                    <h2 class="text-xl font-bold mb-4">Produção de Leite Mensal</h2>
+                    <div class="flex items-center space-x-4 mb-4">
+                        <label for="month-select" class="text-sm font-medium text-gray-700">Mês:</label>
+                        <select id="month-select" class="p-2 border rounded-lg">
+                            ${monthNames.map((name, index) => `<option value="${index + 1}" ${index + 1 === currentMonth ? 'selected' : ''}>${name}</option>`).join('')}
+                        </select>
+                        <label for="year-select" class="text-sm font-medium text-gray-700">Ano:</label>
+                        <input type="number" id="year-select" value="${currentYear}" min="2000" class="p-2 border rounded-lg w-24">
                     </div>
-                    <div class="card p-6">
-                        <h2 class="text-xl font-bold mb-4">Relatório Financeiro (Último Mês)</h2>
-                        <p>Gráfico de receitas vs. custos aqui...</p>
-                    </div>
+                    <canvas id="dashboardMilkChart"></canvas>
+                </div>
+
+                <div class="card p-6">
+                    <h2 class="text-xl font-bold mb-4">Animais Cadastrados</h2>
+                    <ul class="space-y-4">
+                        ${animals.length > 0 ? animalsHtml : '<p class="text-center text-gray-500">Nenhum animal cadastrado.</p>'}
+                    </ul>
                 </div>
             `;
+            
+            // Initial chart render
+            renderDashboardMilkChart(currentYear, currentMonth);
+
+            // Add event listeners for chart filters
+            document.getElementById('month-select').addEventListener('change', updateDashboardChart);
+            document.getElementById('year-select').addEventListener('change', updateDashboardChart);
+        }
+        
+        // Function to update the dashboard milk chart
+        function updateDashboardChart() {
+            const selectedMonth = parseInt(document.getElementById('month-select').value);
+            const selectedYear = parseInt(document.getElementById('year-select').value);
+            renderDashboardMilkChart(selectedYear, selectedMonth);
         }
 
-        // Render Fazenda page
-        function renderFazendaPage() {
-            contentArea.innerHTML = `
-                <div class="card">
-                    <h1 class="text-2xl font-bold mb-6">Informações da Fazenda</h1>
-                    <form id="fazenda-form" class="space-y-4">
-                        <div>
-                            <label for="nome" class="block text-sm font-medium text-gray-700">Nome da Fazenda</label>
-                            <input type="text" id="nome" name="nome" value="${farmData.nome || ''}" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
-                        </div>
-                        <div>
-                            <label for="localizacao" class="block text-sm font-medium text-gray-700">Localização</label>
-                            <input type="text" id="localizacao" name="localizacao" value="${farmData.localizacao || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
-                        </div>
-                        <div>
-                            <label for="areaTotal" class="block text-sm font-medium text-gray-700">Área Total (ha)</label>
-                            <input type="number" id="areaTotal" name="areaTotal" value="${farmData.areaTotal || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
-                        </div>
-                        <div>
-                            <label for="areaPastagem" class="block text-sm font-medium text-gray-700">Área de Pastagem (ha)</label>
-                            <input type="number" id="areaPastagem" name="areaPastagem" value="${farmData.areaPastagem || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2">
-                        </div>
-                        <button type="submit" class="w-full bg-blue-600 text-white rounded-lg p-3 font-semibold hover:bg-blue-700 transition-colors duration-200">Salvar Informações</button>
-                    </form>
-                </div>
-            `;
-            document.getElementById('fazenda-form').addEventListener('submit', handleFazendaFormSubmit);
-        }
+        // Function to render the dashboard milk chart
+        function renderDashboardMilkChart(year, month) {
+            const dailyProduction = {};
+            milkProduction.forEach(record => {
+                const recordDate = new Date(record.data);
+                if (recordDate.getFullYear() === year && (recordDate.getMonth() + 1) === month) {
+                    const day = recordDate.getDate();
+                    dailyProduction[day] = (dailyProduction[day] || 0) + parseFloat(record.volumeGeral);
+                }
+            });
 
-        // Handle Fazenda form submission
-        async function handleFazendaFormSubmit(e) {
-            e.preventDefault();
-            const form = e.target;
-            const data = {
-                nome: form.nome.value,
-                localizacao: form.localizacao.value,
-                areaTotal: parseFloat(form.areaTotal.value),
-                areaPastagem: parseFloat(form.areaPastagem.value),
-                updatedAt: new Date()
-            };
-            const docRef = doc(db, `artifacts/${appId}/users/${userId}/farms/fazenda_data`);
-            await setDoc(docRef, data, { merge: true });
-            showAlert("Sucesso!", "Dados da fazenda salvos com sucesso.");
-        }
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const labels = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+            const data = labels.map(day => dailyProduction[day] || 0);
 
-        // Render Rebanho page
-        function renderRebanhoPage() {
-            const animalsHtml = animals.map(cow => `
+            if (dashboardChart) {
+                dashboardChart.destroy();
+            }
+
+            const ctx = document.getElementById('dashboardMilkChart').getContext('2d');
+            dashboardChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Produção Diária (L)',
+                        data: data,
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Volume (L)' }
+                        },
+                        x: {
+                            title: { display: true, text: 'Dia do Mês' }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: (context) => `Dia ${context[0].label}`,
+                                label: (context) => `Volume: ${context.raw} L`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Render Fazendas page
+        function renderFazendasPage() {
+            const farmsHtml = farms.map(farm => `
                 <div class="card flex flex-col sm:flex-row justify-between items-center p-4">
                     <div class="flex-1 mb-2 sm:mb-0">
-                        <h3 class="text-xl font-bold text-gray-800">Vaca #${cow.brinco}</h3>
-                        <p class="text-sm text-gray-500">Raça: ${cow.raca} | Nascimento: ${cow.dataNascimento}</p>
+                        <h3 class="text-xl font-bold text-gray-800">${farm.nome}</h3>
+                        <p class="text-sm text-gray-500">${farm.localizacao.cidade} - ${farm.localizacao.estado}</p>
                     </div>
                     <div class="flex space-x-2">
-                        <button onclick="viewAnimal('${cow.id}')" class="bg-blue-500 text-white p-2 rounded-lg text-sm hover:bg-blue-600 transition-colors duration-200">Ver Detalhes</button>
+                        <button onclick="editFazenda('${farm.id}')" class="bg-yellow-500 text-white p-2 rounded-lg text-sm hover:bg-yellow-600 transition-colors duration-200">Editar</button>
                     </div>
                 </div>
             `).join('');
@@ -490,50 +548,191 @@
             contentArea.innerHTML = `
                 <div class="card">
                     <div class="flex flex-col sm:flex-row justify-between items-center mb-6">
-                        <h1 class="text-2xl font-bold mb-4 sm:mb-0">Controle do Rebanho</h1>
-                        <button id="add-animal-btn" class="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors duration-200">Adicionar Vaca</button>
+                        <h1 class="text-2xl font-bold mb-4 sm:mb-0">Gerenciar Fazendas</h1>
+                        <button id="add-fazenda-btn" class="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors duration-200">Adicionar Fazenda</button>
+                    </div>
+                    <div id="farm-list" class="space-y-4">
+                        ${farms.length > 0 ? farmsHtml : '<p class="text-center text-gray-500">Nenhuma fazenda cadastrada.</p>'}
+                    </div>
+                    <div id="fazenda-form-container" class="mt-8 hidden"></div>
+                </div>
+            `;
+            document.getElementById('add-fazenda-btn').addEventListener('click', () => renderFazendaForm());
+        }
+
+        // Render form to add/edit fazenda
+        function renderFazendaForm(farm = {}) {
+            const formContainer = document.getElementById('fazenda-form-container');
+            formContainer.classList.remove('hidden');
+
+            const statesHtml = states.map(state => `<option value="${state}" ${farm.localizacao?.estado === state ? 'selected' : ''}>${state}</option>`).join('');
+            
+            formContainer.innerHTML = `
+                <div class="card p-6">
+                    <h2 class="text-xl font-bold mb-4">${farm.id ? 'Editar Fazenda' : 'Adicionar Nova Fazenda'}</h2>
+                    <form id="fazenda-form" class="space-y-4">
+                        <input type="hidden" id="fazenda-id" value="${farm.id || ''}">
+                        <div>
+                            <label for="nome" class="block text-sm font-medium text-gray-700">Nome da Fazenda</label>
+                            <input type="text" id="nome" name="nome" value="${farm.nome || ''}" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                        </div>
+                        <div>
+                            <label for="estado" class="block text-sm font-medium text-gray-700">Estado</label>
+                            <select id="estado" name="estado" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                                <option value="">Selecione...</option>
+                                ${statesHtml}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="cidade" class="block text-sm font-medium text-gray-700">Cidade</label>
+                            <input type="text" id="cidade" name="cidade" value="${farm.localizacao?.cidade || ''}" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                        </div>
+                        <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
+                            <button type="submit" class="bg-blue-600 text-white p-3 rounded-lg font-semibold flex-1 hover:bg-blue-700">Salvar</button>
+                            <button type="button" onclick="cancelForm('fazenda')" class="bg-gray-400 text-white p-3 rounded-lg font-semibold flex-1 hover:bg-gray-500">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            document.getElementById('fazenda-form').addEventListener('submit', handleFazendaFormSubmit);
+        }
+        
+        // Handle Fazenda form submission
+        async function handleFazendaFormSubmit(e) {
+            e.preventDefault();
+            const form = e.target;
+            const fazendaId = form['fazenda-id'].value;
+            const data = {
+                nome: form.nome.value,
+                localizacao: {
+                    estado: form.estado.value,
+                    cidade: form.cidade.value
+                },
+                updatedAt: new Date()
+            };
+            try {
+                if (fazendaId) {
+                    const docRef = doc(db, `artifacts/${appId}/users/${userId}/farms`, fazendaId);
+                    await updateDoc(docRef, data);
+                    showAlert("Sucesso!", "Farm data updated.");
+                } else {
+                    await addDoc(collection(db, `artifacts/${appId}/users/${userId}/farms`), data);
+                    showAlert("Sucesso!", "New farm added.");
+                }
+                document.getElementById('fazenda-form-container').classList.add('hidden');
+            } catch (error) {
+                console.error("Error saving farm:", error);
+                showAlert("Error", "Could not save farm data.");
+            }
+        }
+
+        window.editFazenda = function(fazendaId) {
+            const farm = farms.find(f => f.id === fazendaId);
+            renderFazendaForm(farm);
+        };
+
+        // Render Animais page
+        function renderAnimaisPage() {
+            const animalsHtml = animals.map(animal => {
+                const farm = farms.find(f => f.id === animal.fazendaId);
+                const farmName = farm ? farm.nome : 'N/A';
+                return `
+                    <div class="card flex flex-col sm:flex-row justify-between items-center p-4">
+                        <div class="flex-1 mb-2 sm:mb-0">
+                            <h3 class="text-xl font-bold text-gray-800">${animal.nome || 'Sem Nome'} #${animal.brinco}</h3>
+                            <p class="text-sm text-gray-500">Fazenda: ${farmName} | Sexo: ${animal.sexo} | Raça: ${animal.raca || 'N/A'}</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="viewAnimal('${animal.id}')" class="bg-blue-500 text-white p-2 rounded-lg text-sm hover:bg-blue-600 transition-colors duration-200">Ver Detalhes</button>
+                            <button onclick="editAnimal('${animal.id}')" class="bg-yellow-500 text-white p-2 rounded-lg text-sm hover:bg-yellow-600">Editar</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            contentArea.innerHTML = `
+                <div class="card">
+                    <div class="flex flex-col sm:flex-row justify-between items-center mb-6">
+                        <h1 class="text-2xl font-bold mb-4 sm:mb-0">Controle de Animais</h1>
+                        <button id="add-animal-btn" class="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors duration-200">Adicionar Animal</button>
                     </div>
                     <div id="animal-list" class="space-y-4">
-                        ${animals.length > 0 ? animalsHtml : '<p class="text-center text-gray-500">Nenhuma vaca cadastrada.</p>'}
+                        ${animals.length > 0 ? animalsHtml : '<p class="text-center text-gray-500">Nenhum animal cadastrado.</p>'}
                     </div>
                     <div id="animal-form-container" class="mt-8 hidden"></div>
                 </div>
             `;
-            document.getElementById('add-animal-btn').addEventListener('click', () => renderAnimalForm());
+            document.getElementById('add-animal-btn').addEventListener('click', () => {
+                if (farms.length === 0) {
+                    showAlert("Error", "You need to register at least one farm before adding an animal.");
+                    return;
+                }
+                renderAnimalForm();
+            });
         }
 
         // Render form to add/edit animal
-        function renderAnimalForm(cow = {}) {
+        function renderAnimalForm(animal = {}) {
             const formContainer = document.getElementById('animal-form-container');
             formContainer.classList.remove('hidden');
+
+            const farmsOptionsHtml = farms.map(farm => `<option value="${farm.id}" ${animal.fazendaId === farm.id ? 'selected' : ''}>${farm.nome}</option>`).join('');
+
             formContainer.innerHTML = `
                 <div class="card p-6">
-                    <h2 class="text-xl font-bold mb-4">${cow.id ? 'Editar Vaca' : 'Adicionar Nova Vaca'}</h2>
+                    <h2 class="text-xl font-bold mb-4">${animal.id ? 'Editar Animal' : 'Adicionar Novo Animal'}</h2>
                     <form id="animal-form" class="space-y-4">
-                        <input type="hidden" id="animal-id" value="${cow.id || ''}">
+                        <input type="hidden" id="animal-id" value="${animal.id || ''}">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Nome</label>
+                            <input type="text" id="nome" name="nome" value="${animal.nome || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                        </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Identificação (Brinco/Chip)</label>
-                            <input type="text" id="brinco" name="brinco" value="${cow.brinco || ''}" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                            <input type="text" id="brinco" name="brinco" value="${animal.brinco || ''}" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Fazenda</label>
+                            <select id="fazendaId" name="fazendaId" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                                ${farmsOptionsHtml}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Sexo</label>
+                            <select id="sexo" name="sexo" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                                <option value="Fêmea" ${animal.sexo === 'Fêmea' ? 'selected' : ''}>Fêmea</option>
+                                <option value="Macho" ${animal.sexo === 'Macho' ? 'selected' : ''}>Macho</option>
+                            </select>
+                        </div>
+                        <div id="lactacao-container" class="${animal.sexo === 'Fêmea' ? '' : 'hidden'}">
+                            <label class="inline-flex items-center">
+                                <input type="checkbox" id="emLactacao" name="emLactacao" ${animal.emLactacao ? 'checked' : ''} class="mr-2">
+                                Em lactação
+                            </label>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Raça</label>
-                            <input type="text" id="raca" name="raca" value="${cow.raca || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                            <select id="raca" name="raca" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                                <option value="">Selecione...</option>
+                                <option value="Girolando" ${animal.raca === 'Girolando' ? 'selected' : ''}>Girolando</option>
+                                <option value="Holandesa" ${animal.raca === 'Holandesa' ? 'selected' : ''}>Holandesa</option>
+                                <option value="Jersey" ${animal.raca === 'Jersey' ? 'selected' : ''}>Jersey</option>
+                                <option value="Gir" ${animal.raca === 'Gir' ? 'selected' : ''}>Gir</option>
+                                <option value="Guzerá" ${animal.raca === 'Guzerá' ? 'selected' : ''}>Guzerá</option>
+                                <option value="Sindi" ${animal.raca === 'Sindi' ? 'selected' : ''}>Sindi</option>
+                                </select>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Data de Nascimento</label>
-                            <input type="date" id="dataNascimento" name="dataNascimento" value="${cow.dataNascimento || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                            <input type="date" id="dataNascimento" name="dataNascimento" value="${animal.dataNascimento || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Peso (kg)</label>
-                            <input type="number" step="0.1" id="peso" name="peso" value="${cow.peso || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Origem</label>
-                            <input type="text" id="origem" name="origem" value="${cow.origem || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                            <input type="number" step="0.1" id="peso" name="peso" value="${animal.peso || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
                         </div>
                         <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
                             <button type="submit" class="bg-blue-600 text-white p-3 rounded-lg font-semibold flex-1 hover:bg-blue-700">Salvar</button>
-                            <button type="button" onclick="cancelForm()" class="bg-gray-400 text-white p-3 rounded-lg font-semibold flex-1 hover:bg-gray-500">Cancelar</button>
+                            <button type="button" onclick="cancelForm('animal')" class="bg-gray-400 text-white p-3 rounded-lg font-semibold flex-1 hover:bg-gray-500">Cancelar</button>
                         </div>
                     </form>
                 </div>
@@ -547,82 +746,105 @@
             const form = e.target;
             const animalId = form['animal-id'].value;
             const data = {
+                nome: form.nome.value,
                 brinco: form.brinco.value,
+                fazendaId: form.fazendaId.value,
+                sexo: form.sexo.value,
                 raca: form.raca.value,
                 dataNascimento: form.dataNascimento.value,
                 peso: parseFloat(form.peso.value),
-                origem: form.origem.value,
+                emLactacao: form.emLactacao ? form.emLactacao.checked : false,
                 updatedAt: new Date()
+
+
             };
 
             try {
                 if (animalId) {
                     const docRef = doc(db, `artifacts/${appId}/users/${userId}/animals`, animalId);
                     await updateDoc(docRef, data);
-                    showAlert("Sucesso!", "Dados do animal atualizados.");
+                    showAlert("Sucesso!", "Animal data updated.");
                 } else {
                     await addDoc(collection(db, `artifacts/${appId}/users/${userId}/animals`), data);
-                    showAlert("Sucesso!", "Nova vaca adicionada.");
+                    showAlert("Sucesso!", "New animal added.");
                 }
                 document.getElementById('animal-form-container').classList.add('hidden');
             } catch (error) {
-                console.error("Erro ao salvar animal:", error);
-                showAlert("Erro", "Não foi possível salvar os dados do animal.");
+                console.error("Error saving animal:", error);
+                showAlert("Error", "Could not save animal data.");
             }
         }
-        
-        // This function is defined globally to be called from the HTML
-        window.viewAnimal = function(animalId) {
-            const cow = animals.find(a => a.id === animalId);
-            if (!cow) {
+
+        window.editAnimal = function(animalId) {
+            const animal = animals.find(a => a.id === animalId);
+            if (!animal) {
                 showAlert("Erro", "Animal não encontrado.");
                 return;
             }
+            renderAnimalForm(animal);
+        };
+
+        
+        // This function is defined globally to be called from the HTML
+        window.viewAnimal = function(animalId) {
+            const animal = animals.find(a => a.id === animalId);
+            if (!animal) {
+                showAlert("Error", "Animal not found.");
+                return;
+            }
+            const farm = farms.find(f => f.id === animal.fazendaId);
+            const farmName = farm ? farm.nome : 'N/A';
 
             contentArea.innerHTML = `
                 <div class="card">
                     <div class="flex flex-col sm:flex-row justify-between items-center mb-6">
-                        <h1 class="text-2xl font-bold mb-4 sm:mb-0">Detalhes da Vaca #${cow.brinco}</h1>
-                        <button onclick="renderRebanhoPage()" class="w-full sm:w-auto bg-gray-400 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-500 transition-colors duration-200">Voltar</button>
+                        <h1 class="text-2xl font-bold mb-4 sm:mb-0">Detalhes do Animal #${animal.brinco}</h1>
+                        <button onclick="renderAnimaisPage()" class="w-full sm:w-auto bg-gray-400 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-500 transition-colors duration-200">Voltar</button>
                     </div>
                     <div class="space-y-4">
-                        <p><strong>Identificação:</strong> ${cow.brinco}</p>
-                        <p><strong>Raça:</strong> ${cow.raca || 'N/A'}</p>
-                        <p><strong>Data de Nascimento:</strong> ${cow.dataNascimento || 'N/A'}</p>
-                        <p><strong>Peso:</strong> ${cow.peso ? cow.peso + ' kg' : 'N/A'}</p>
+                        <p><strong>Nome:</strong> ${animal.nome || 'N/A'}</p>
+                        <p><strong>Identificação:</strong> ${animal.brinco}</p>
+                        <p><strong>Fazenda:</strong> ${farmName}</p>
+                        <p><strong>Sexo:</strong> ${animal.sexo || 'N/A'}</p>
+                        <p><strong>Raça:</strong> ${animal.raca || 'N/A'}</p>
+                        <p><strong>Data de Nascimento:</strong> ${animal.dataNascimento || 'N/A'}</p>
+                        <p><strong>Peso:</strong> ${animal.peso ? animal.peso + ' kg' : 'N/A'}</p>
+                        <p><strong>Em Lactação:</strong> ${animal.emLactacao ? 'Sim' : 'Não'}</p>
                     </div>
 
+                    ${animal.sexo === 'Fêmea' ? `
                     <div class="mt-8">
                         <h2 class="text-xl font-bold mb-4">Controle Reprodutivo</h2>
                         <form id="reproducao-form" class="space-y-4">
-                            <input type="hidden" name="animalId" value="${cow.id}">
+                            <input type="hidden" name="animalId" value="${animal.id}">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Data da Cobertura/Inseminação</label>
-                                <input type="date" name="coberturaData" value="${cow.reproducao?.coberturaData || ''}" class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                                <input type="date" name="coberturaData" value="${animal.reproducao?.coberturaData || ''}" class="mt-1 block w-full rounded-md border-gray-300 p-2">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Previsão de Parto</label>
-                                <input type="date" name="previsaoParto" value="${cow.reproducao?.previsaoParto || ''}" class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                                <input type="date" name="previsaoParto" value="${animal.reproducao?.previsaoParto || ''}" class="mt-1 block w-full rounded-md border-gray-300 p-2">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Histórico de Partos</label>
-                                <textarea name="historicoPartos" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${cow.reproducao?.historicoPartos || ''}</textarea>
+                                <textarea name="historicoPartos" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${animal.reproducao?.historicoPartos || ''}</textarea>
                             </div>
                             <button type="submit" class="w-full bg-blue-600 text-white rounded-lg p-3 font-semibold hover:bg-blue-700">Salvar Reprodutivo</button>
                         </form>
                     </div>
+                    ` : ''}
 
                     <div class="mt-8">
                         <h2 class="text-xl font-bold mb-4">Saúde e Bem-estar</h2>
                         <form id="saude-form" class="space-y-4">
-                            <input type="hidden" name="animalId" value="${cow.id}">
+                            <input type="hidden" name="animalId" value="${animal.id}">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Histórico de Vacinas</label>
-                                <textarea name="vacinas" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${cow.saude?.vacinas || ''}</textarea>
+                                <textarea name="vacinas" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${animal.saude?.vacinas || ''}</textarea>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Ocorrências Clínicas</label>
-                                <textarea name="ocorrenciasClinicas" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${cow.saude?.ocorrenciasClinicas || ''}</textarea>
+                                <textarea name="ocorrenciasClinicas" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${animal.saude?.ocorrenciasClinicas || ''}</textarea>
                             </div>
                             <button type="submit" class="w-full bg-blue-600 text-white rounded-lg p-3 font-semibold hover:bg-blue-700">Salvar Saúde</button>
                         </form>
@@ -631,17 +853,19 @@
                     <div class="mt-8">
                         <h2 class="text-xl font-bold mb-4">Alimentação e Nutrição</h2>
                         <form id="alimentacao-form" class="space-y-4">
-                            <input type="hidden" name="animalId" value="${cow.id}">
+                            <input type="hidden" name="animalId" value="${animal.id}">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Dieta Fornecida</label>
-                                <textarea name="dieta" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${cow.alimentacao?.dieta || ''}</textarea>
+                                <textarea name="dieta" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${animal.alimentacao?.dieta || ''}</textarea>
                             </div>
                             <button type="submit" class="w-full bg-blue-600 text-white rounded-lg p-3 font-semibold hover:bg-blue-700">Salvar Alimentação</button>
                         </form>
                     </div>
                 </div>
             `;
-            document.getElementById('reproducao-form').addEventListener('submit', handleReproducaoFormSubmit);
+            if (animal.sexo === 'Fêmea') {
+                document.getElementById('reproducao-form').addEventListener('submit', handleReproducaoFormSubmit);
+            }
             document.getElementById('saude-form').addEventListener('submit', handleSaudeFormSubmit);
             document.getElementById('alimentacao-form').addEventListener('submit', handleAlimentacaoFormSubmit);
         }
@@ -659,7 +883,7 @@
             };
             const docRef = doc(db, `artifacts/${appId}/users/${userId}/animals`, animalId);
             await updateDoc(docRef, data, { merge: true });
-            showAlert("Sucesso!", "Dados reprodutivos salvos.");
+            showAlert("Success!", "Reproductive data saved.");
         }
 
         async function handleSaudeFormSubmit(e) {
@@ -674,7 +898,7 @@
             };
             const docRef = doc(db, `artifacts/${appId}/users/${userId}/animals`, animalId);
             await updateDoc(docRef, data, { merge: true });
-            showAlert("Sucesso!", "Dados de saúde salvos.");
+            showAlert("Success!", "Health data saved.");
         }
 
         async function handleAlimentacaoFormSubmit(e) {
@@ -688,71 +912,101 @@
             };
             const docRef = doc(db, `artifacts/${appId}/users/${userId}/animals`, animalId);
             await updateDoc(docRef, data, { merge: true });
-            showAlert("Sucesso!", "Dados de alimentação salvos.");
+            showAlert("Success!", "Feeding data saved.");
         }
 
         // Function to render Milk Production page
         function renderProducaoPage() {
-            const totalMilk = milkProduction.reduce((sum, record) => sum + parseFloat(record.volume), 0);
             const today = new Date().toISOString().split('T')[0];
-            const milkRecordsHtml = milkProduction.sort((a,b) => new Date(b.data) - new Date(a.data)).map(record => `
-                <li class="bg-gray-50 p-3 rounded-lg flex flex-col sm:flex-row justify-between items-center">
-                    <span>${record.data} - ${record.volume} L</span>
-                    <span>Vaca: #${record.cowBrinco}</span>
-                </li>
-            `).join('');
 
-            contentArea.innerHTML = `
-                <div class="card">
-                    <h1 class="text-2xl font-bold mb-6">Controle de Produção de Leite</h1>
-                    <div class="flex flex-col sm:flex-row justify-between items-center mb-4">
-                        <h2 class="text-xl font-bold mb-4 sm:mb-0">Produção Diária</h2>
-                        <button id="add-milk-record-btn" class="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors duration-200">Registrar Produção</button>
-                    </div>
-                    <form id="milk-form" class="hidden mb-6 card p-4">
-                        <h3 class="font-bold mb-2">Novo Registro</h3>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Data</label>
-                                <input type="date" id="milk-date" value="${today}" class="mt-1 block w-full rounded-md border-gray-300 p-2">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Vaca</label>
-                                <select id="milk-cow-select" class="mt-1 block w-full rounded-md border-gray-300 p-2">
-                                    ${animals.map(cow => `<option value="${cow.brinco}">Vaca #${cow.brinco}</option>`).join('')}
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Volume (L)</label>
-                                <input type="number" step="0.01" id="milk-volume" required class="mt-1 block w-full rounded-md border-gray-300 p-2">
-                            </div>
-                        </div>
-                        <div class="mt-4 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-                            <button type="submit" class="bg-blue-600 text-white p-2 rounded-lg font-semibold flex-1 hover:bg-blue-700">Salvar</button>
-                            <button type="button" onclick="document.getElementById('milk-form').classList.add('hidden')" class="bg-gray-400 text-white p-2 rounded-lg font-semibold flex-1 hover:bg-gray-500">Cancelar</button>
-                        </div>
-                    </form>
-                    <ul class="space-y-2 max-h-96 overflow-y-auto">
-                        ${milkProduction.length > 0 ? milkRecordsHtml : '<p class="text-center text-gray-500">Nenhum registro de produção.</p>'}
-                    </ul>
-                </div>
+        // Agrupa ordenhas por dia
+        const groupedByDate = milkProduction.reduce((acc, record) => {
+            if (!acc[record.data]) acc[record.data] = { total: 0, ordenhas: [] };
+            const vol = parseFloat(record.volumeGeral) || 0;
+            acc[record.data].total += vol;
+            acc[record.data].ordenhas.push(record);
+            return acc;
+        }, {});
+
+        // Ordena datas desc
+        const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(b) - new Date(a));
+
+        // Monta HTML agrupado
+        const milkRecordsHtml = sortedDates.map(date => {
+            const group = groupedByDate[date];
+            const ordenhasHtml = group.ordenhas.map(r =>
+                `<li class="text-sm text-gray-600 ml-4">• ${r.ordenha}: ${parseFloat(r.volumeGeral).toFixed(2)} L</li>`
+            ).join('');
+            return `
+                <li class="bg-gray-50 p-3 rounded-lg">
+                    <span class="font-bold">${date} - Total: ${group.total.toFixed(2)} L</span>
+                    <ul>${ordenhasHtml}</ul>
+                </li>
             `;
-            document.getElementById('add-milk-record-btn').addEventListener('click', () => {
-                document.getElementById('milk-form').classList.remove('hidden');
-            });
-            document.getElementById('milk-form').addEventListener('submit', handleMilkFormSubmit);
-        }
+        }).join('');
+
+        // Renderiza página
+        contentArea.innerHTML = `
+            <div class="card">
+                <h1 class="text-2xl font-bold mb-6">Controle de Produção de Leite</h1>
+                <button id="add-milk-record-btn" class="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded-lg font-semibold mb-6 hover:bg-green-700 transition-colors duration-200">Novo Registro</button>
+            
+                <form id="milk-form" class="hidden mb-6 card p-4">
+                    <h3 class="font-bold mb-2">Registro Diário</h3>
+                
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Data</label>
+                        <input type="date" id="milk-date" value="${today}" class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                    </div>
+
+                    <div class="mt-4">
+                        <label class="block text-sm font-medium text-gray-700">Quantidade(L)</label>
+                        <input type="number" step="0.01" id="milk-volume-geral" required class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                    </div>
+
+                    <div class="mt-4">
+                        <label class="block text-sm font-medium text-gray-700">Ordenha</label>
+                        <select id="milk-ordenha" class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                            <option value="1ª">1ª Ordenha</option>
+                            <option value="2ª">2ª Ordenha</option>
+                        </select>
+                    </div>
+
+                    <div class="mt-4 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                        <button type="submit" class="bg-blue-600 text-white p-2 rounded-lg font-semibold flex-1 hover:bg-blue-700">Salvar</button>
+                        <button type="button" onclick="document.getElementById('milk-form').classList.add('hidden')" class="bg-gray-400 text-white p-2 rounded-lg font-semibold flex-1 hover:bg-gray-500">Cancelar</button>
+                    </div>
+                </form>
+
+                <ul class="space-y-2 max-h-96 overflow-y-auto">
+                    ${milkProduction.length > 0 ? milkRecordsHtml : '<p class="text-center text-gray-500">Nenhum registro de produção.</p>'}
+                </ul>
+            </div>
+        `;
+
+        document.getElementById('add-milk-record-btn').addEventListener('click', () => {
+            document.getElementById('milk-form').classList.remove('hidden');
+        });
+        document.getElementById('milk-form').addEventListener('submit', handleMilkFormSubmit);
+    }
+
 
         async function handleMilkFormSubmit(e) {
             e.preventDefault();
+            const dailyDate = document.getElementById('milk-date').value;
+            const volumeGeral = parseFloat(document.getElementById('milk-volume-geral').value);
+            const ordenha = document.getElementById('milk-ordenha').value;
+
+            
             const data = {
-                data: document.getElementById('milk-date').value,
-                cowBrinco: document.getElementById('milk-cow-select').value,
-                volume: parseFloat(document.getElementById('milk-volume').value),
+                data: dailyDate,
+                volumeGeral: volumeGeral,
+                ordenha: ordenha,
                 createdAt: new Date()
             };
+
             await addDoc(collection(db, `artifacts/${appId}/users/${userId}/milkProduction`), data);
-            showAlert("Sucesso!", "Produção de leite registrada.");
+            showAlert("Produção de leite registrada.");
             document.getElementById('milk-form').reset();
             document.getElementById('milk-form').classList.add('hidden');
         }
@@ -832,17 +1086,23 @@
 
         async function handleFinanceFormSubmit(e) {
             e.preventDefault();
+            const form = e.target;
             const data = {
-                type: document.getElementById('finance-type').value,
-                value: parseFloat(document.getElementById('finance-value').value),
-                descricao: document.getElementById('finance-desc').value,
-                data: document.getElementById('finance-date').value,
+                type: form['finance-type'].value,
+                value: parseFloat(form['finance-value'].value),
+                descricao: form['finance-desc'].value,
+                data: form['finance-date'].value,
                 createdAt: new Date()
             };
-            await addDoc(collection(db, `artifacts/${appId}/users/${userId}/financials`), data);
-            showAlert("Sucesso!", "Lançamento financeiro registrado.");
-            document.getElementById('finance-form').reset();
-            document.getElementById('finance-form').classList.add('hidden');
+            try {
+                await addDoc(collection(db, `artifacts/${appId}/users/${userId}/financials`), data);
+                showAlert("Success!", "Financial record saved.");
+                document.getElementById('finance-form').reset();
+                document.getElementById('finance-form').classList.add('hidden');
+            } catch (error) {
+                console.error("Error saving financial record:", error);
+                showAlert("Error", "Could not save financial record.");
+            }
         }
 
         function renderRelatoriosPage() {
@@ -852,7 +1112,7 @@
                 const month = date.getMonth();
                 const year = date.getFullYear();
                 const key = `${year}-${month + 1}`;
-                acc[key] = (acc[key] || 0) + parseFloat(record.volume);
+                acc[key] = (acc[key] || 0) + parseFloat(record.volumeGeral);
                 return acc;
             }, {});
             const sortedMonths = Object.keys(milkDataByMonth).sort();
@@ -883,19 +1143,6 @@
             const revenues = sortedFinancialMonths.map(key => financialDataByMonth[key].receita);
             const costs = sortedFinancialMonths.map(key => financialDataByMonth[key].custo);
 
-            // Ranking das vacas mais produtivas
-            const productionByCow = milkProduction.reduce((acc, record) => {
-                acc[record.cowBrinco] = (acc[record.cowBrinco] || 0) + parseFloat(record.volume);
-                return acc;
-            }, {});
-            const sortedCows = Object.entries(productionByCow).sort((a,b) => b[1] - a[1]);
-            const rankingHtml = sortedCows.map(([brinco, volume], index) => `
-                <li class="bg-gray-50 p-3 rounded-lg flex justify-between items-center">
-                    <span>${index + 1}. Vaca #${brinco}</span>
-                    <span class="font-semibold">${volume.toFixed(2)} L</span>
-                </li>
-            `).join('');
-
             contentArea.innerHTML = `
                 <div class="card">
                     <h1 class="text-2xl font-bold mb-6">Relatórios e Indicadores</h1>
@@ -908,13 +1155,6 @@
                     <div class="card">
                         <h2 class="text-xl font-bold mb-4">Relatório Financeiro por Mês</h2>
                         <canvas id="financeChart"></canvas>
-                    </div>
-
-                    <div class="card">
-                        <h2 class="text-xl font-bold mb-4">Ranking de Vacas Produtivas</h2>
-                        <ul class="space-y-2 max-h-96 overflow-y-auto">
-                           ${rankingHtml || '<p class="text-center text-gray-500">Nenhum dado de produção disponível para o ranking.</p>'}
-                        </ul>
                     </div>
                 </div>
             `;
@@ -959,8 +1199,12 @@
         }
 
         // Function to handle form cancellation
-        window.cancelForm = function() {
-            document.getElementById('animal-form-container').classList.add('hidden');
+        window.cancelForm = function(formType) {
+            if (formType === 'fazenda') {
+                document.getElementById('fazenda-form-container').classList.add('hidden');
+            } else if (formType === 'animal') {
+                document.getElementById('animal-form-container').classList.add('hidden');
+            }
         };
 
         // --- INITIALIZE APPLICATION ---
@@ -969,4 +1213,3 @@
 </body>
 
 </html>
-
