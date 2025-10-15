@@ -36,7 +36,6 @@
 
 <body class="bg-gray-100">
 
-    <!-- Modal for alerts -->
     <div id="modal-container" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
         <div class="relative top-20 mx-auto p-5 border w-11/12 sm:w-96 shadow-lg rounded-md bg-white">
             <div class="mt-3 text-center">
@@ -53,15 +52,12 @@
         </div>
     </div>
     
-    <!-- Loading indicator -->
     <div id="loading-spinner" class="fixed inset-0 flex items-center justify-center bg-gray-100 z-50 hidden">
         <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
     </div>
 
-    <!-- Main App Container -->
     <div id="app-container" class="main-container hidden">
 
-        <!-- Navbar -->
         <nav class="header-bg p-4 shadow-md sticky top-0 z-50">
             <div class="container mx-auto flex justify-between items-center flex-wrap">
                 <a href="#" class="text-white text-2xl font-bold rounded-lg px-2 py-1">Rebanho Leiteiro</a>
@@ -84,15 +80,12 @@
             </div>
         </nav>
 
-        <!-- Main Content Area -->
         <main class="container mx-auto p-4 lg:p-8 flex-1">
             <div id="content-area">
-                <!-- Dynamic content will be injected here -->
-            </div>
+                </div>
         </main>
     </div>
 
-    <!-- Login/Register Container -->
     <div id="auth-container" class="flex items-center justify-center min-h-screen bg-gray-100 hidden">
         <div class="card w-full max-w-sm mx-auto p-6">
             <h2 class="text-2xl font-bold text-center mb-6">Acesse sua Conta</h2>
@@ -113,7 +106,6 @@
         </div>
     </div>
 
-    <!-- Scripts -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -137,6 +129,7 @@
         let animals = [];
         let financialRecords = [];
         let milkProduction = [];
+        let milkSellingPrice = 0; // NEW: Global variable for the selling price of milk
         let authMode = 'login'; // 'login' or 'register'
         let dashboardChart = null;
 
@@ -296,6 +289,20 @@
                  return collection(db, `artifacts/${appId}/users/${userId}/${collectionName}`);
             };
 
+            // NEW: Listener for Settings (Milk Price)
+            const getSettingsDoc = (docName) => doc(db, `artifacts/${appId}/users/${userId}/settings`, docName);
+
+            onSnapshot(getSettingsDoc('milkPrice'), (doc) => {
+                if (doc.exists()) {
+                    milkSellingPrice = parseFloat(doc.data().valorVendaLeite) || 0;
+                } else {
+                    milkSellingPrice = 0;
+                }
+                // Rerender the finance page to show the updated price and forecast
+                if (currentPage === 'financeiro') renderPage(); 
+            });
+
+
             // Listener for Fazendas
             onSnapshot(getPrivateCollection('farms'), (snapshot) => {
                 farms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -313,7 +320,8 @@
             // Listener for Milk Production
             onSnapshot(getPrivateCollection('milkProduction'), (snapshot) => {
                 milkProduction = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                if (currentPage === 'producao' || currentPage === 'dashboard' || currentPage === 'relatorios') renderPage();
+                // Rerender any page that depends on production data
+                if (currentPage === 'producao' || currentPage === 'dashboard' || currentPage === 'financeiro' || currentPage === 'relatorios') renderPage();
             });
 
             // Listener for Financial Records
@@ -359,17 +367,20 @@
             const currentYear = today.getFullYear();
             const currentMonth = today.getMonth() + 1;
             const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-            const prenhes = animals.filter(a => a.prenhe).length;
+            
+            // --- AJUSTE: Filtrar apenas animais ativos ---
+            const activeAnimals = animals.filter(a => a.ativo !== false);
 
-            const totalMilk = milkProduction.reduce((sum, record) => {
-                const volume = parseFloat(record.volumeGeral);
-                 return sum + (isNaN(volume) ? 0 : volume);
-            }, 0);
+            const prenhes = activeAnimals.filter(a => a.prenhe).length;
+            const totalAnimals = activeAnimals.length;
+            // ---------------------------------------------
+
+
             const totalRevenue = financialRecords.filter(f => f.type === 'receita').reduce((sum, f) => sum + parseFloat(f.value), 0);
             const totalCosts = financialRecords.filter(f => f.type === 'custo').reduce((sum, f) => sum + parseFloat(f.value), 0);
             const balance = totalRevenue - totalCosts;
 
-            const animalAlerts = animals.filter(animal => {
+            const animalAlerts = activeAnimals.filter(animal => {
                 const today = new Date();
                 // Check for calving alert (due within 30 days, for females only)
                 if (animal.sexo === 'Fêmea' && animal.previsaoParto) {
@@ -385,17 +396,16 @@
                 }
                 // Check for vaccination alerts (due within 30 days)
                 if (animal.saude?.vacinas?.length > 0) {
-                    return animal.saude.vacinas.some(vac => {
-                        const nextVacDate = new Date(vac.proximaData);
-                        const diffDays = Math.ceil((nextVacDate - today) / (1000 * 60 * 60 * 24));
-                        return diffDays <= 30 && diffDays > 0;
-                    });
+                    // Nota: O campo `vacinas` no modelo de dados atual não é um array, é um textarea no formulário de saúde.
+                    // A lógica de alerta precisa ser revista para vacinas, mas a intenção de mostrar alertas é mantida.
+                    // Para o alerta funcionar, seria necessário um array de objetos de vacina com 'proximaData'.
+                    // Mantendo a lógica de alerta simplificada por enquanto.
                 }
                 return false;
             });
-            const lactatingAnimals = animals.filter(a => a.emLactacao).length;
+            const lactatingAnimals = activeAnimals.filter(a => a.emLactacao).length;
 
-            const animalsHtml = animals.map(animal => {
+            const animalsHtml = activeAnimals.map(animal => {
                 const farm = farms.find(f => f.id === animal.fazendaId);
                 const farmName = farm ? farm.nome : 'N/A';
                 return `
@@ -410,16 +420,12 @@
             
             contentArea.innerHTML = `
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    <div class="card text-center bg-blue-500 text-white p-6">
-                        <h2 class="text-2xl font-bold">${totalMilk.toFixed(2)} L</h2>
-                        <p class="text-sm opacity-80">Produção de Leite (Total)</p>
-                    </div>
-                    <div class="card text-center bg-green-500 text-white p-6">
-                        <h2 class="text-2xl font-bold">R$ ${balance.toFixed(2)}</h2>
-                        <p class="text-sm opacity-80">Lucratividade</p>
+                    <div id="milk-production-card" class="card text-center bg-blue-500 text-white p-6">
+                        <h2 class="text-2xl font-bold" id="monthly-milk-volume">-- L</h2>
+                        <p class="text-sm opacity-80" id="monthly-milk-label">Produção de Leite (Mês)</p>
                     </div>
                     <div class="card text-center bg-purple-500 text-white p-6">
-                        <h2 class="text-2xl font-bold">${animals.length}</h2>
+                        <h2 class="text-2xl font-bold">${totalAnimals}</h2>
                         <p class="text-sm opacity-80">Animais no Rebanho</p>
                     </div>
                     <div class="card text-center bg-pink-500 text-white p-6">
@@ -455,36 +461,74 @@
                 <div class="card p-6">
                     <h2 class="text-xl font-bold mb-4">Animais Cadastrados</h2>
                     <ul class="space-y-4">
-                        ${animals.length > 0 ? animalsHtml : '<p class="text-center text-gray-500">Nenhum animal cadastrado.</p>'}
+                        ${activeAnimals.length > 0 ? animalsHtml : '<p class="text-center text-gray-500">Nenhum animal ativo cadastrado.</p>'}
                     </ul>
                 </div>
                
 
             `;
             
-            // Initial chart render
+            // Initial data render: calls both KPI and chart updates for the current month/year
+            updateMonthlyMilkKPI(currentYear, currentMonth);
             renderDashboardMilkChart(currentYear, currentMonth);
 
             // Add event listeners for chart filters
-            document.getElementById('month-select').addEventListener('change', updateDashboardChart);
-            document.getElementById('year-select').addEventListener('change', updateDashboardChart);
+            document.getElementById('month-select').addEventListener('change', updateDashboardData);
+            document.getElementById('year-select').addEventListener('change', updateDashboardData);
         }
         
-        // Function to update the dashboard milk chart
-        function updateDashboardChart() {
+        // Função para atualizar o Dashboard (KPI e Gráfico) quando os filtros mudam
+        function updateDashboardData() {
             const selectedMonth = parseInt(document.getElementById('month-select').value);
             const selectedYear = parseInt(document.getElementById('year-select').value);
+            
+            // 1. Atualiza o KPI de Produção Mensal
+            updateMonthlyMilkKPI(selectedYear, selectedMonth);
+
+            // 2. Atualiza o Gráfico
             renderDashboardMilkChart(selectedYear, selectedMonth);
+        }
+
+        // NOVA FUNÇÃO para calcular e atualizar o KPI de Produção de Leite Mensal
+        function updateMonthlyMilkKPI(year, month) {
+            const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+            
+            // Filtra e soma a produção apenas para o mês e ano selecionados
+            const monthlyMilk = milkProduction.reduce((sum, record) => {
+                const volume = parseFloat(record.volumeGeral);
+                if (isNaN(volume)) return sum;
+
+                const recordDate = new Date(record.data);
+                if (recordDate.getFullYear() === year && (recordDate.getMonth() + 1) === month) {
+                    return sum + volume;
+                }
+                return sum;
+            }, 0);
+
+            const monthName = monthNames[month - 1];
+
+            const volumeElement = document.getElementById('monthly-milk-volume');
+            const labelElement = document.getElementById('monthly-milk-label');
+
+            if (volumeElement) {
+                volumeElement.textContent = `${monthlyMilk.toFixed(2)} L`;
+            }
+            if (labelElement) {
+                labelElement.textContent = `Produção de Leite (${monthName}/${year})`;
+            }
         }
 
         // Function to render the dashboard milk chart
         function renderDashboardMilkChart(year, month) {
             const dailyProduction = {};
             milkProduction.forEach(record => {
+                const volume = parseFloat(record.volumeGeral);
+                if (isNaN(volume)) return;
+
                 const recordDate = new Date(record.data);
                 if (recordDate.getFullYear() === year && (recordDate.getMonth() + 1) === month) {
                     const day = recordDate.getDate();
-                    dailyProduction[day] = (dailyProduction[day] || 0) + parseFloat(record.volumeGeral);
+                    dailyProduction[day] = (dailyProduction[day] || 0) + volume;
                 }
             });
 
@@ -534,6 +578,7 @@
             });
         }
         
+        // ... (rest of the code for other pages, forms, and handlers remains the same)
         // Render Fazendas page
         function renderFazendasPage() {
             const farmsHtml = farms.map(farm => `
@@ -599,7 +644,7 @@
             `;
             document.getElementById('fazenda-form').addEventListener('submit', handleFazendaFormSubmit);
         }
-        
+
         // Handle Fazenda form submission
         async function handleFazendaFormSubmit(e) {
             e.preventDefault();
@@ -683,6 +728,9 @@
 
             const farmsOptionsHtml = farms.map(farm => `<option value="${farm.id}" ${animal.fazendaId === farm.id ? 'selected' : ''}>${farm.nome}</option>`).join('');
 
+            // Garante que o estado inicial do animal.ativo seja true se não for false
+            const isAnimalAtivo = animal.ativo !== false;
+
             formContainer.innerHTML = `
                 <div class="card p-6">
                     <h2 class="text-xl font-bold mb-4">${animal.id ? 'Editar Animal' : 'Adicionar Novo Animal'}</h2>
@@ -755,11 +803,11 @@
                         </div>
                         <div class="mt-4">
                             <label class="inline-flex items-center">
-                                <input type="checkbox" id="ativo" name="ativo" ${animal.ativo === false ? '' : 'checked'} class="mr-2">
+                                <input type="checkbox" id="ativo" name="ativo" ${isAnimalAtivo ? 'checked' : ''} class="mr-2">
                                 Animal Ativo
                             </label>
                         </div>
-                        <div id="motivo-container" class="${animal.ativo === false ? '' : 'hidden'} mt-2">
+                        <div id="motivo-container" class="${isAnimalAtivo ? 'hidden' : ''} mt-2">
                             <label class="block text-sm font-medium text-gray-700">Motivo da Inativação</label>
                             <select id="motivoInativacao" name="motivoInativacao" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
                                 <option value="">Selecione...</option>
@@ -771,6 +819,40 @@
                 </div>
             `;
             document.getElementById('animal-form').addEventListener('submit', handleAnimalFormSubmit);
+
+            // --- INÍCIO DO AJUSTE DE INTERATIVIDADE ---
+            const sexoSelect = document.getElementById('sexo');
+            const lactacaoContainer = document.getElementById('lactacao-container');
+            const prenhezContainer = document.getElementById('prenhez-container');
+            const ativoCheckbox = document.getElementById('ativo');
+            const motivoContainer = document.getElementById('motivo-container');
+
+            // Lógica para mostrar/ocultar campos de Fêmeas
+            function toggleFemaleFields() {
+                if (sexoSelect.value === 'Fêmea') {
+                    lactacaoContainer.classList.remove('hidden');
+                    prenhezContainer.classList.remove('hidden');
+                } else {
+                    lactacaoContainer.classList.add('hidden');
+                    prenhezContainer.classList.add('hidden');
+                }
+            }
+            sexoSelect.addEventListener('change', toggleFemaleFields);
+            toggleFemaleFields(); // Executa ao carregar o formulário
+
+            // Lógica para mostrar/ocultar motivo de inativação
+            if (ativoCheckbox) {
+                const checkInativacao = () => {
+                    if (ativoCheckbox.checked === false) {
+                        motivoContainer.classList.remove('hidden');
+                    } else {
+                        motivoContainer.classList.add('hidden');
+                    }
+                };
+                ativoCheckbox.addEventListener('change', checkInativacao);
+                checkInativacao(); // Executa ao carregar o formulário
+            }
+            // --- FIM DO AJUSTE DE INTERATIVIDADE ---
         }
 
         // Handle animal form submission
@@ -830,6 +912,14 @@
                 showAlert("Error", "Animal not found.");
                 return;
             }
+            
+            // --- INÍCIO DO AJUSTE DE ROBUSTEZ ---
+            // Inicializa objetos aninhados para garantir que a leitura de `animal.reproducao?.previsaoParto` funcione mesmo se o objeto não estiver no Firestore
+            animal.reproducao = animal.reproducao || {};
+            animal.saude = animal.saude || {};
+            animal.alimentacao = animal.alimentacao || {};
+            // --- FIM DO AJUSTE DE ROBUSTEZ ---
+
             const farm = farms.find(f => f.id === animal.fazendaId);
             const farmName = farm ? farm.nome : 'N/A';
 
@@ -861,15 +951,15 @@
                             <input type="hidden" name="animalId" value="${animal.id}">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Data da Cobertura/Inseminação</label>
-                                <input type="date" name="coberturaData" value="${animal.reproducao?.coberturaData || ''}" class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                                <input type="date" name="coberturaData" value="${animal.reproducao.coberturaData || ''}" class="mt-1 block w-full rounded-md border-gray-300 p-2">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Previsão de Parto</label>
-                                <input type="date" name="previsaoParto" value="${animal.reproducao?.previsaoParto || ''}" class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                                <input type="date" name="previsaoParto" value="${animal.reproducao.previsaoParto || ''}" class="mt-1 block w-full rounded-md border-gray-300 p-2">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Histórico de Partos</label>
-                                <textarea name="historicoPartos" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${animal.reproducao?.historicoPartos || ''}</textarea>
+                                <textarea name="historicoPartos" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${animal.reproducao.historicoPartos || ''}</textarea>
                             </div>
                             <button type="submit" class="w-full bg-blue-600 text-white rounded-lg p-3 font-semibold hover:bg-blue-700">Salvar Reprodutivo</button>
                         </form>
@@ -882,11 +972,11 @@
                             <input type="hidden" name="animalId" value="${animal.id}">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Histórico de Vacinas</label>
-                                <textarea name="vacinas" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${animal.saude?.vacinas || ''}</textarea>
+                                <textarea name="vacinas" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${animal.saude.vacinas || ''}</textarea>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Ocorrências Clínicas</label>
-                                <textarea name="ocorrenciasClinicas" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${animal.saude?.ocorrenciasClinicas || ''}</textarea>
+                                <textarea name="ocorrenciasClinicas" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${animal.saude.ocorrenciasClinicas || ''}</textarea>
                             </div>
                             <button type="submit" class="w-full bg-blue-600 text-white rounded-lg p-3 font-semibold hover:bg-blue-700">Salvar Saúde</button>
                         </form>
@@ -898,7 +988,7 @@
                             <input type="hidden" name="animalId" value="${animal.id}">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Dieta Fornecida</label>
-                                <textarea name="dieta" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${animal.alimentacao?.dieta || ''}</textarea>
+                                <textarea name="dieta" rows="3" class="mt-1 block w-full rounded-md border-gray-300 p-2">${animal.alimentacao.dieta || ''}</textarea>
                             </div>
                             <button type="submit" class="w-full bg-blue-600 text-white rounded-lg p-3 font-semibold hover:bg-blue-700">Salvar Alimentação</button>
                         </form>
@@ -1030,7 +1120,7 @@
             document.getElementById('milk-form').classList.remove('hidden');
         });
         document.getElementById('milk-form').addEventListener('submit', handleMilkFormSubmit);
-    }
+        }
 
 
         async function handleMilkFormSubmit(e) {
@@ -1053,42 +1143,112 @@
             document.getElementById('milk-form').classList.add('hidden');
         }
 
+        // NOVO: Função para esconder e resetar o formulário financeiro (Adição/Edição)
+        window.cancelFinanceForm = function() {
+            const form = document.getElementById('finance-form');
+            form.classList.add('hidden');
+            form.reset();
+            // Resetar para o modo 'Novo Lançamento'
+            document.getElementById('finance-id').value = '';
+            document.getElementById('finance-form-title').textContent = 'Novo Lançamento';
+            document.getElementById('finance-submit-btn').textContent = 'Salvar';
+        };
+
+        // NOVO: Função para preencher o formulário no modo Edição
+        window.editFinanceRecord = function(recordId) {
+            const record = financialRecords.find(r => r.id === recordId);
+            if (!record) {
+                showAlert("Erro", "Lançamento não encontrado.");
+                return;
+            }
+
+            const form = document.getElementById('finance-form');
+            document.getElementById('finance-id').value = record.id;
+            document.getElementById('finance-type').value = record.type;
+            // Garante que o valor tenha duas casas decimais para o input type="number"
+            document.getElementById('finance-value').value = parseFloat(record.value).toFixed(2);
+            document.getElementById('finance-desc').value = record.descricao;
+            document.getElementById('finance-date').value = record.data;
+
+            document.getElementById('finance-form-title').textContent = 'Editar Lançamento';
+            document.getElementById('finance-submit-btn').textContent = 'Atualizar';
+            
+            form.classList.remove('hidden');
+            // Rola para a visualização do formulário
+            document.getElementById('finance-form').scrollIntoView({ behavior: 'smooth' });
+        };
+
+
         // Function to render Financeiro page
         function renderFinanceiroPage() {
-            const totalRevenue = financialRecords.filter(f => f.type === 'receita').reduce((sum, f) => sum + parseFloat(f.value), 0);
-            const totalCosts = financialRecords.filter(f => f.type === 'custo').reduce((sum, f) => sum + parseFloat(f.value), 0);
-            const balance = totalRevenue - totalCosts;
+            const today = new Date();
+            const currentYear = today.getFullYear();
+            const currentMonth = today.getMonth() + 1;
+            const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
+            // MODIFICADO: Adiciona botão de edição e mais detalhes na lista
             const recordsHtml = financialRecords.sort((a, b) => new Date(b.data) - new Date(a.data)).map(record => `
                 <li class="bg-gray-50 p-3 rounded-lg flex flex-col sm:flex-row justify-between items-center ${record.type === 'custo' ? 'text-red-500' : 'text-green-500'}">
                     <div class="flex-1 mb-2 sm:mb-0">
                         <span class="font-bold">${record.descricao}</span>
                         <span class="text-sm text-gray-500 sm:ml-2">(${record.data})</span>
+                        <span class="font-semibold text-lg ml-4">R$ ${parseFloat(record.value).toFixed(2)}</span>
                     </div>
-                    <span class="font-semibold text-lg">R$ ${parseFloat(record.value).toFixed(2)}</span>
+                    <button onclick="window.editFinanceRecord('${record.id}')" class="bg-yellow-500 text-white p-2 rounded-lg text-sm hover:bg-yellow-600 transition-colors duration-200 mt-2 sm:mt-0">Editar</button>
                 </li>
             `).join('');
 
             contentArea.innerHTML = `
                 <div class="card">
                     <h1 class="text-2xl font-bold mb-6">Controle Financeiro</h1>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                        <div class="card p-4 text-center bg-green-100 text-green-700">
-                            <p class="text-sm">Receitas</p>
-                            <p class="font-bold text-lg">R$ ${totalRevenue.toFixed(2)}</p>
-                        </div>
-                        <div class="card p-4 text-center bg-red-100 text-red-700">
-                            <p class="text-sm">Custos</p>
-                            <p class="font-bold text-lg">R$ ${totalCosts.toFixed(2)}</p>
-                        </div>
-                        <div class="card p-4 text-center ${balance >= 0 ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}">
-                            <p class="text-sm">Saldo</p>
-                            <p class="font-bold text-lg">R$ ${balance.toFixed(2)}</p>
+                    
+                    <div class="card p-6 mb-6">
+                        <h2 class="text-xl font-bold mb-4">Filtro de Período da Previsão</h2>
+                        <div class="flex items-center space-x-4">
+                            <label for="finance-month-select" class="text-sm font-medium text-gray-700">Mês:</label>
+                            <select id="finance-month-select" class="p-2 border rounded-lg">
+                                ${monthNames.map((name, index) => `<option value="${index + 1}" ${index + 1 === currentMonth ? 'selected' : ''}>${name}</option>`).join('')}
+                            </select>
+                            <label for="finance-year-select" class="text-sm font-medium text-gray-700">Ano:</label>
+                            <input type="number" id="finance-year-select" value="${currentYear}" min="2000" class="p-2 border rounded-lg w-24">
                         </div>
                     </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+                        <div class="card p-4 text-center bg-blue-500 text-white">
+                            <p class="text-sm opacity-80" id="forecast-label">Previsão de Receita (Mês)</p>
+                            <p class="font-bold text-lg" id="forecast-value">R$ 0.00</p>
+                        </div>
+                        <div class="card p-4 text-center bg-yellow-500 text-white">
+                            <p class="text-sm opacity-80">Valor do Litro</p>
+                            <p class="font-bold text-lg" id="milk-price-display">R$ ${milkSellingPrice.toFixed(2)}</p>
+                        </div>
+                        <div class="card p-4 text-center bg-green-100 text-green-700">
+                            <p class="text-sm" id="period-revenue-label">Receitas no Período</p>
+                            <p class="font-bold text-lg" id="period-revenue-value">R$ 0.00</p>
+                        </div>
+                        <div class="card p-4 text-center bg-red-100 text-red-700">
+                            <p class="text-sm" id="period-cost-label">Custos no Período</p>
+                            <p class="font-bold text-lg" id="period-cost-value">R$ 0.00</p>
+                        </div>
+                    </div>
+                    
+                    <div class="card p-6 mb-6">
+                        <h2 class="text-xl font-bold mb-4">Configurações de Preços</h2>
+                        <form id="milk-price-form" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Valor de Venda do Litro de Leite (R$)</label>
+                                <input type="number" step="0.01" id="valorVendaLeite" value="${milkSellingPrice.toFixed(2)}" required class="mt-1 block w-full rounded-md border-gray-300 p-2">
+                            </div>
+                            <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded-lg font-semibold hover:bg-blue-700">Salvar Preço</button>
+                        </form>
+                    </div>
+
                     <button id="add-finance-record-btn" class="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded-lg font-semibold mb-6 hover:bg-green-700 transition-colors duration-200">Novo Lançamento</button>
+                    
                     <form id="finance-form" class="hidden mb-6 card p-4">
-                        <h3 class="font-bold mb-2">Novo Lançamento</h3>
+                        <input type="hidden" id="finance-id" value="">
+                        <h3 id="finance-form-title" class="font-bold mb-2">Novo Lançamento</h3>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Tipo</label>
@@ -1111,40 +1271,171 @@
                             </div>
                         </div>
                         <div class="mt-4 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-                            <button type="submit" class="bg-blue-600 text-white p-2 rounded-lg font-semibold flex-1 hover:bg-blue-700">Salvar</button>
-                            <button type="button" onclick="document.getElementById('finance-form').classList.add('hidden')" class="bg-gray-400 text-white p-2 rounded-lg font-semibold flex-1 hover:bg-gray-500">Cancelar</button>
+                            <button type="submit" id="finance-submit-btn" class="bg-blue-600 text-white p-2 rounded-lg font-semibold flex-1 hover:bg-blue-700">Salvar</button>
+                            <button type="button" onclick="cancelFinanceForm()" class="bg-gray-400 text-white p-2 rounded-lg font-semibold flex-1 hover:bg-gray-500">Cancelar</button>
                         </div>
                     </form>
+                    
                     <ul class="space-y-2 max-h-96 overflow-y-auto">
                         ${financialRecords.length > 0 ? recordsHtml : '<p class="text-center text-gray-500">Nenhum registro financeiro.</p>'}
                     </ul>
                 </div>
             `;
+            
+            // Initial KPI update
+            updateFinancialKPIs(currentYear, currentMonth);
+
+            // Add event listeners for filters and form
+            document.getElementById('finance-month-select').addEventListener('change', handleFinanceFilterChange);
+            document.getElementById('finance-year-select').addEventListener('change', handleFinanceFilterChange);
+            document.getElementById('milk-price-form').addEventListener('submit', handleMilkPriceFormSubmit);
+
+            // MODIFICADO: Atualiza o listener para resetar o formulário corretamente
             document.getElementById('add-finance-record-btn').addEventListener('click', () => {
+                document.getElementById('finance-id').value = '';
+                document.getElementById('finance-form-title').textContent = 'Novo Lançamento';
+                document.getElementById('finance-submit-btn').textContent = 'Salvar';
+                document.getElementById('finance-form').reset();
                 document.getElementById('finance-form').classList.remove('hidden');
             });
             document.getElementById('finance-form').addEventListener('submit', handleFinanceFormSubmit);
         }
 
+        // NEW: Function to handle milk price form submission
+        async function handleMilkPriceFormSubmit(e) {
+            e.preventDefault();
+            const valor = parseFloat(document.getElementById('valorVendaLeite').value);
+            
+            if (isNaN(valor) || valor < 0) {
+                showAlert("Erro", "Por favor, insira um valor de venda válido.");
+                return;
+            }
+
+            const data = {
+                valorVendaLeite: valor,
+                updatedAt: new Date()
+            };
+            
+            try {
+                // Use setDoc with merge to create the 'milkPrice' document if it doesn't exist, or update it
+                const docRef = doc(db, `artifacts/${appId}/users/${userId}/settings`, 'milkPrice');
+                await setDoc(docRef, data, { merge: true }); 
+                showAlert("Sucesso!", "Valor de venda do leite atualizado.");
+            } catch (error) {
+                console.error("Error saving milk price:", error);
+                showAlert("Erro", "Não foi possível salvar o valor de venda do leite.");
+            }
+        }
+
+        // NEW: Function to handle filter changes and trigger KPI update
+        function handleFinanceFilterChange() {
+            const selectedMonth = parseInt(document.getElementById('finance-month-select').value);
+            const selectedYear = parseInt(document.getElementById('finance-year-select').value);
+            updateFinancialKPIs(selectedYear, selectedMonth);
+        }
+
+        // MODIFIED: Function to calculate and update financial KPIs (including period revenue and cost)
+        function updateFinancialKPIs(year, month) {
+            const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+            
+            // 1. Calculate Total Milk Production for the selected period
+            const monthlyMilkVolume = milkProduction.reduce((sum, record) => {
+                const volume = parseFloat(record.volumeGeral);
+                if (isNaN(volume)) return sum;
+
+                const recordDate = new Date(record.data);
+                if (recordDate.getFullYear() === year && (recordDate.getMonth() + 1) === month) {
+                    return sum + volume;
+                }
+                return sum;
+            }, 0);
+            
+            // 2. Calculate Revenue Forecast
+            const revenueForecast = monthlyMilkVolume * milkSellingPrice;
+            
+            // NEW: 3. Calculate Period-Specific Revenue and Costs
+            const periodFinancials = financialRecords.reduce((acc, record) => {
+                const value = parseFloat(record.value);
+                if (isNaN(value)) return acc;
+
+                const recordDate = new Date(record.data);
+                // Check if the record date matches the selected year and month (1-based index)
+                if (recordDate.getFullYear() === year && (recordDate.getMonth() + 1) === month) {
+                    if (record.type === 'receita') {
+                        acc.revenue += value;
+                    } else if (record.type === 'custo') {
+                        acc.cost += value;
+                    }
+                }
+                return acc;
+            }, { revenue: 0, cost: 0 });
+
+            
+            // 4. Update the KPI displays
+            const forecastValueElement = document.getElementById('forecast-value');
+            const forecastLabelElement = document.getElementById('forecast-label');
+            const milkPriceDisplayElement = document.getElementById('milk-price-display');
+            // NEW elements
+            const periodRevenueValueElement = document.getElementById('period-revenue-value');
+            const periodCostValueElement = document.getElementById('period-cost-value');
+            
+            const monthName = monthNames[month - 1];
+
+            if (forecastValueElement) {
+                forecastValueElement.textContent = `R$ ${revenueForecast.toFixed(2)}`;
+            }
+            if (forecastLabelElement) {
+                forecastLabelElement.textContent = `Previsão de Receita (${monthName}/${year})`;
+            }
+            if (milkPriceDisplayElement) {
+                milkPriceDisplayElement.textContent = `R$ ${milkSellingPrice.toFixed(2)}`;
+            }
+            
+            // NEW updates for period financial KPIs
+            if (periodRevenueValueElement) {
+                periodRevenueValueElement.textContent = `R$ ${periodFinancials.revenue.toFixed(2)}`;
+            }
+            if (periodCostValueElement) {
+                periodCostValueElement.textContent = `R$ ${periodFinancials.cost.toFixed(2)}`;
+            }
+        }
+
+
+        // MODIFICADO: Agora trata tanto a adição (addDoc) quanto a edição (updateDoc)
         async function handleFinanceFormSubmit(e) {
             e.preventDefault();
-            const form = e.target;
+            const recordId = document.getElementById('finance-id').value; // Pega o ID (vazio se for novo)
+            const type = document.getElementById('finance-type').value;
+            const value = document.getElementById('finance-value').value;
+            const description = document.getElementById('finance-desc').value;
+            const date = document.getElementById('finance-date').value;
+
             const data = {
-                type: form['finance-type'].value,
-                value: parseFloat(form['finance-value'].value),
-                descricao: form['finance-desc'].value,
-                data: form['finance-date'].value,
-                createdAt: new Date()
+                type: type,
+                value: parseFloat(value),
+                descricao: description,
+                data: date,
+                updatedAt: new Date()
             };
+
             try {
-                await addDoc(collection(db, `artifacts/${appId}/users/${userId}/financials`), data);
-                showAlert("Success!", "Financial record saved.");
-                document.getElementById('finance-form').reset();
-                document.getElementById('finance-form').classList.add('hidden');
+                if (recordId) {
+                    // EDIÇÃO: Usa updateDoc
+                    const docRef = doc(db, `artifacts/${appId}/users/${userId}/financials`, recordId);
+                    await updateDoc(docRef, data);
+                    showAlert("Sucesso!", "Lançamento financeiro atualizado.");
+                } else {
+                    // ADIÇÃO: Usa addDoc
+                    data.createdAt = new Date(); // Adiciona timestamp de criação apenas para novos
+                    await addDoc(collection(db, `artifacts/${appId}/users/${userId}/financials`), data);
+                    showAlert("Sucesso!", "Novo lançamento financeiro registrado.");
+                }
             } catch (error) {
                 console.error("Error saving financial record:", error);
-                showAlert("Error", "Could not save financial record.");
+                showAlert("Erro", "Não foi possível salvar o lançamento financeiro.");
             }
+
+            window.cancelFinanceForm();
         }
 
         function renderRelatoriosPage() {
