@@ -7,6 +7,8 @@
     <title>Rebanho Leiteiro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.21/jspdf.plugin.autotable.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body {
@@ -345,17 +347,34 @@
             }
         }
 
-        // New function to calculate milk total for a specific month/year
-        function calculateMonthlyMilkTotal(year, month) {
-            return milkProduction.reduce((sum, record) => {
+        /**
+         * NOVO - Atualiza os cards dinâmicos do Dashboard (Produção Mensal)
+         */
+        function updateDashboardCards(year, month) {
+            const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+            // 1. Calculate Monthly Milk Production
+            const monthlyMilk = milkProduction.reduce((sum, record) => {
                 const recordDate = new Date(record.data);
-                // The month in Date object is 0-indexed, so we compare month + 1
-                if (recordDate.getFullYear() === year && (recordDate.getMonth() + 1) === month) {
+                const recordYear = recordDate.getFullYear();
+                const recordMonth = recordDate.getMonth() + 1;
+
+                if (recordYear === year && recordMonth === month) {
                     const volume = parseFloat(record.volumeGeral);
                     return sum + (isNaN(volume) ? 0 : volume);
                 }
-                return sum;
+                 return sum;
             }, 0);
+            
+            // 2. Update Milk Card
+            const milkCardValue = document.getElementById('dashboard-milk-value');
+            const milkCardTitle = document.getElementById('dashboard-milk-title');
+            if (milkCardValue) {
+                milkCardValue.textContent = `${monthlyMilk.toFixed(2)} L`;
+            }
+            if (milkCardTitle) {
+                 milkCardTitle.textContent = `Produção de Leite (${monthNames[month - 1]}/${year})`;
+            }
         }
 
         // Render Dashboard
@@ -366,19 +385,16 @@
             const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
             
             // FILTRA APENAS ANIMAIS ATIVOS
-            const activeAnimals = animals.filter(a => a.ativo !== false); 
-            
+            const activeAnimals = animals.filter(a => a.ativo !== false);
+            const activeAnimalsCount = activeAnimals.length;
             const prenhes = activeAnimals.filter(a => a.prenhe).length;
 
-            // Calculate milk production only for the current month by default
-            const initialMonthlyMilkTotal = calculateMonthlyMilkTotal(currentYear, currentMonth); 
-            
             const totalRevenue = financialRecords.filter(f => f.type === 'receita').reduce((sum, f) => sum + parseFloat(f.value), 0);
             const totalCosts = financialRecords.filter(f => f.type === 'custo').reduce((sum, f) => sum + parseFloat(f.value), 0);
             const balance = totalRevenue - totalCosts;
 
-            // Alertas apenas para animais ativos
-            const animalAlerts = activeAnimals.filter(animal => {
+            // Alertas
+            const animalAlerts = activeAnimals.filter(animal => { // Usa activeAnimals
                 const today = new Date();
                 // Check for calving alert (due within 30 days, for females only)
                 if (animal.sexo === 'Fêmea' && animal.previsaoParto) {
@@ -402,9 +418,10 @@
                 }
                 return false;
             });
-            const lactatingAnimals = activeAnimals.filter(a => a.emLactacao).length;
+            const lactatingAnimals = activeAnimals.filter(a => a.emLactacao).length; // Usa activeAnimals
 
-            const animalsHtml = animals.map(animal => {
+            // Lista de animais ativos para exibição
+            const activeAnimalsHtml = activeAnimals.map(animal => { 
                 const farm = farms.find(f => f.id === animal.fazendaId);
                 const farmName = farm ? farm.nome : 'N/A';
                 return `
@@ -420,11 +437,11 @@
             contentArea.innerHTML = `
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                     <div class="card text-center bg-blue-500 text-white p-6">
-                        <h2 id="monthly-milk-total" class="text-2xl font-bold">${initialMonthlyMilkTotal.toFixed(2)} L</h2>
-                        <p class="text-sm opacity-80">Produção de Leite (Mês Selecionado)</p>
+                        <h2 id="dashboard-milk-value" class="text-2xl font-bold">... L</h2>
+                        <p id="dashboard-milk-title" class="text-sm opacity-80">Produção de Leite</p>
                     </div>
                     <div class="card text-center bg-purple-500 text-white p-6">
-                        <h2 class="text-2xl font-bold">${activeAnimals.length}</h2>
+                        <h2 class="text-2xl font-bold">${activeAnimalsCount}</h2>
                         <p class="text-sm opacity-80">Animais Ativos</p>
                     </div>
                     <div class="card text-center bg-pink-500 text-white p-6">
@@ -458,9 +475,9 @@
                 </div>
 
                 <div class="card p-6">
-                    <h2 class="text-xl font-bold mb-4">Animais Cadastrados</h2>
+                    <h2 class="text-xl font-bold mb-4">Animais Ativos Cadastrados</h2>
                     <ul class="space-y-4">
-                        ${animals.length > 0 ? animalsHtml : '<p class="text-center text-gray-500">Nenhum animal cadastrado.</p>'}
+                        ${activeAnimals.length > 0 ? activeAnimalsHtml : '<p class="text-center text-gray-500">Nenhum animal ativo cadastrado.</p>'}
                     </ul>
                 </div>
                
@@ -470,25 +487,21 @@
             // Initial chart render
             renderDashboardMilkChart(currentYear, currentMonth);
 
+            // NOVO - Atualiza o card de produção com o mês inicial
+            updateDashboardCards(currentYear, currentMonth);
+
             // Add event listeners for chart filters
-            document.getElementById('month-select').addEventListener('change', updateDashboardMetricsAndChart);
-            document.getElementById('year-select').addEventListener('change', updateDashboardMetricsAndChart);
+            document.getElementById('month-select').addEventListener('change', updateDashboardChart);
+            document.getElementById('year-select').addEventListener('change', updateDashboardChart);
         }
         
-        // Function to update the dashboard milk chart and metrics
-        function updateDashboardMetricsAndChart() {
+        // Function to update the dashboard milk chart
+        function updateDashboardChart() {
             const selectedMonth = parseInt(document.getElementById('month-select').value);
             const selectedYear = parseInt(document.getElementById('year-select').value);
-            
-            // 1. Update the metric card
-            const monthlyTotal = calculateMonthlyMilkTotal(selectedYear, selectedMonth);
-            const milkTotalElement = document.getElementById('monthly-milk-total');
-            if (milkTotalElement) {
-                 milkTotalElement.textContent = `${monthlyTotal.toFixed(2)} L`;
-            }
-
-            // 2. Update the chart
             renderDashboardMilkChart(selectedYear, selectedMonth);
+            // NOVO - Atualiza o card de produção também
+            updateDashboardCards(selectedYear, selectedMonth); 
         }
 
         // Function to render the dashboard milk chart
@@ -752,19 +765,6 @@
                             <input type="text" id="mae" name="mae" value="${animal.mae || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700">Nome do Pai</label>
-                            <input type="text" id="pai" name="pai" value="${animal.pai || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Data de Nascimento</label>
-                            <input type="date" id="dataNascimento" name="dataNascimento" value="${animal.dataNascimento || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Peso (kg)</label>
-                            <input type="number" step="0.1" id="peso" name="peso" value="${animal.peso || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
-                        </div>
-                        
-                        <div>
                             <label class="block text-sm font-medium text-gray-700">Origem do Animal</label>
                             <select id="origem" name="origem" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
                                 <option value="">Selecione...</option>
@@ -776,7 +776,18 @@
                             <label class="block text-sm font-medium text-gray-700">Observações</label>
                             <textarea id="observacoes" name="observacoes" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">${animal.observacoes || ''}</textarea>
                         </div>
-
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Nome do Pai</label>
+                            <input type="text" id="pai" name="pai" value="${animal.pai || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Data de Nascimento</label>
+                            <input type="date" id="dataNascimento" name="dataNascimento" value="${animal.dataNascimento || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Peso (kg)</label>
+                            <input type="number" step="0.1" id="peso" name="peso" value="${animal.peso || ''}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                        </div>
                         <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
                             <button type="submit" class="bg-blue-600 text-white p-3 rounded-lg font-semibold flex-1 hover:bg-blue-700">Salvar</button>
                             <button type="button" onclick="cancelForm('animal')" class="bg-gray-400 text-white p-3 rounded-lg font-semibold flex-1 hover:bg-gray-500">Cancelar</button>
@@ -816,10 +827,8 @@
                 pai: form.pai.value,
                 dataNascimento: form.dataNascimento.value,
                 peso: parseFloat(form.peso.value),
-                // Novos campos
                 origem: form.origem.value,
                 observacoes: form.observacoes.value,
-                // Fim dos novos campos
                 emLactacao: form.emLactacao ? form.emLactacao.checked : false,
                 prenhe: form.prenhe ? form.prenhe.checked : false,
                 ativo: form.ativo ? form.ativo.checked : true,
@@ -1181,8 +1190,11 @@
             }
         }
 
+        // NOVO CÓDIGO PARA RELATÓRIOS DETALHADOS E EXPORTAÇÃO PDF
+        window.jsPDF = window.jspdf.jsPDF; // Acessa a classe jsPDF do objeto global
+
         function renderRelatoriosPage() {
-            // Data for milk production chart
+            // Data for milk production chart (monthly)
             const milkDataByMonth = milkProduction.reduce((acc, record) => {
                 const date = new Date(record.data);
                 const month = date.getMonth();
@@ -1198,7 +1210,7 @@
             });
             const milkVolumes = sortedMonths.map(key => milkDataByMonth[key]);
 
-            // Data for financial chart
+            // Data for financial chart (monthly)
             const financialDataByMonth = financialRecords.reduce((acc, record) => {
                 const date = new Date(record.data);
                 const month = date.getMonth();
@@ -1219,23 +1231,63 @@
             const revenues = sortedFinancialMonths.map(key => financialDataByMonth[key].receita);
             const costs = sortedFinancialMonths.map(key => financialDataByMonth[key].custo);
 
+            const today = new Date().toISOString().split('T')[0];
+            const thirtyDaysAgo = new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0];
+
             contentArea.innerHTML = `
                 <div class="card">
                     <h1 class="text-2xl font-bold mb-6">Relatórios e Indicadores</h1>
                     
+                    <div class="card mb-6">
+                        <h2 class="text-xl font-bold mb-4">Filtro por Período</h2>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label for="report-start-date" class="block text-sm font-medium text-gray-700">Data Inicial</label>
+                                <input type="date" id="report-start-date" value="${thirtyDaysAgo}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                            </div>
+                            <div>
+                                <label for="report-end-date" class="block text-sm font-medium text-gray-700">Data Final</label>
+                                <input type="date" id="report-end-date" value="${today}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2">
+                            </div>
+                            <div>
+                                <button id="generate-reports-btn" class="w-full bg-blue-600 text-white p-2 rounded-lg font-semibold hover:bg-blue-700 mt-6 sm:mt-0 transition-colors duration-200">Gerar Relatórios</button>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="card">
-                        <h2 class="text-xl font-bold mb-4">Produção de Leite por Mês</h2>
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-bold">1. Produção de Leite Diária (Período Selecionado)</h2>
+                            <button id="export-milk-pdf" class="bg-red-500 text-white p-2 rounded-lg text-sm font-semibold hover:bg-red-600 transition-colors duration-200 hidden">Exportar PDF</button>
+                        </div>
+                        <div id="milk-daily-report-table" class="max-h-96 overflow-y-auto">
+                            <p class="text-center text-gray-500">Selecione o período e clique em 'Gerar Relatórios'.</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-bold">2. Receitas, Despesas e Saldo Diário (Período Selecionado)</h2>
+                            <button id="export-finance-pdf" class="bg-red-500 text-white p-2 rounded-lg text-sm font-semibold hover:bg-red-600 transition-colors duration-200 hidden">Exportar PDF</button>
+                        </div>
+                        <div id="finance-daily-report-table" class="max-h-96 overflow-y-auto">
+                            <p class="text-center text-gray-500">Selecione o período e clique em 'Gerar Relatórios'.</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h2 class="text-xl font-bold mb-4">Produção de Leite por Mês (Gráfico)</h2>
                         <canvas id="milkChart"></canvas>
                     </div>
 
                     <div class="card">
-                        <h2 class="text-xl font-bold mb-4">Relatório Financeiro por Mês</h2>
+                        <h2 class="text-xl font-bold mb-4">Relatório Financeiro por Mês (Gráfico)</h2>
                         <canvas id="financeChart"></canvas>
                     </div>
                 </div>
             `;
             
-            // Render the charts
+            // Render the monthly charts
             new Chart(document.getElementById('milkChart'), {
                 type: 'bar',
                 data: {
@@ -1272,9 +1324,274 @@
                 },
                 options: { responsive: true, scales: { y: { beginAtZero: true } } }
             });
+
+            // Add event listeners for the new reports
+            document.getElementById('generate-reports-btn').addEventListener('click', generateAllReports);
+
+            document.getElementById('export-milk-pdf').addEventListener('click', () => {
+                exportReportToPDF('milk-daily-report-table', 'Relatório Diário de Produção de Leite');
+            });
+
+            document.getElementById('export-finance-pdf').addEventListener('click', () => {
+                exportReportToPDF('finance-daily-report-table', 'Relatório Diário Financeiro');
+            });
+
+            // Initial report generation
+            generateAllReports();
         }
 
-        // Function to handle form cancellation
+
+        // Função para gerar todos os relatórios detalhados
+        function generateAllReports() {
+            const startDateStr = document.getElementById('report-start-date').value;
+            const endDateStr = document.getElementById('report-end-date').value;
+
+            if (!startDateStr || !endDateStr) {
+                // Não exibe alerta se for o primeiro carregamento, apenas se o botão for clicado sem datas
+                return;
+            }
+
+            // Garante que a data é tratada corretamente no fuso horário (meia-noite local)
+            const startDate = new Date(startDateStr + 'T00:00:00'); 
+            // Garante que a data final inclui o dia inteiro
+            const endDate = new Date(endDateStr + 'T23:59:59'); 
+
+            if (startDate > endDate) {
+                showAlert("Atenção", "A Data Inicial não pode ser posterior à Data Final.");
+                return;
+            }
+
+            generateMilkReportTable(startDate, endDate);
+            generateFinancialReportTable(startDate, endDate);
+
+            // Mostra botões de exportação se os dados foram gerados
+            const hasMilkData = document.getElementById('milk-daily-report-table').querySelector('table');
+            const hasFinanceData = document.getElementById('finance-daily-report-table').querySelector('table');
+
+            document.getElementById('export-milk-pdf').classList.toggle('hidden', !hasMilkData);
+            document.getElementById('export-finance-pdf').classList.toggle('hidden', !hasFinanceData);
+        }
+
+        // Função para gerar a tabela do Relatório de Produção de Leite Diária
+        function generateMilkReportTable(startDate, endDate) {
+            const container = document.getElementById('milk-daily-report-table');
+            const dailyData = {};
+            let grandTotal = 0;
+
+            milkProduction.filter(record => {
+                // Apenas compara a parte da data (yyyy-mm-dd)
+                const recordDate = new Date(record.data + 'T00:00:00');
+                return recordDate >= startDate && recordDate <= endDate;
+            }).forEach(record => {
+                const dateKey = record.data;
+                const volume = parseFloat(record.volumeGeral) || 0;
+                
+                if (!dailyData[dateKey]) {
+                    dailyData[dateKey] = { total: 0, details: [] };
+                }
+                dailyData[dateKey].total += volume;
+                dailyData[dateKey].details.push(`${record.ordenha}: ${volume.toFixed(2)} L`);
+                grandTotal += volume;
+            });
+            
+            const sortedDates = Object.keys(dailyData).sort();
+
+            if (sortedDates.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500">Nenhum registro de produção encontrado no período selecionado.</p>';
+                return;
+            }
+
+            let tableHtml = `
+                <table id="milk-report-table" class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produção Diária (L)</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detalhes (Ordenhas)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+            `;
+
+            sortedDates.forEach(date => {
+                const data = dailyData[date];
+                tableHtml += `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${date}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${data.total.toFixed(2)} L</td>
+                        <td class="px-6 py-4 text-sm text-gray-500">${data.details.join('; ')}</td>
+                    </tr>
+                `;
+            });
+            
+            tableHtml += `
+                    </tbody>
+                    <tfoot class="bg-gray-100 font-bold">
+                        <tr>
+                            <td class="px-6 py-3 text-left text-sm text-gray-900">TOTAL GERAL</td>
+                            <td class="px-6 py-3 text-left text-sm text-gray-900">${grandTotal.toFixed(2)} L</td>
+                            <td class="px-6 py-3 text-left text-sm text-gray-900"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            `;
+
+            container.innerHTML = tableHtml;
+        }
+
+        // Função para gerar a tabela do Relatório Financeiro Diário
+        function generateFinancialReportTable(startDate, endDate) {
+            const container = document.getElementById('finance-daily-report-table');
+            const dailyData = {};
+            let grandTotalRevenue = 0;
+            let grandTotalCosts = 0;
+
+            financialRecords.filter(record => {
+                const recordDate = new Date(record.data + 'T00:00:00');
+                return recordDate >= startDate && recordDate <= endDate;
+            }).forEach(record => {
+                const dateKey = record.data;
+                const value = parseFloat(record.value) || 0;
+                
+                if (!dailyData[dateKey]) {
+                    dailyData[dateKey] = { receita: 0, custo: 0 };
+                }
+
+                if (record.type === 'receita') {
+                    dailyData[dateKey].receita += value;
+                    grandTotalRevenue += value;
+                } else {
+                    dailyData[dateKey].custo += value;
+                    grandTotalCosts += value;
+                }
+            });
+            
+            const sortedDates = Object.keys(dailyData).sort();
+
+            if (sortedDates.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500">Nenhum registro financeiro encontrado no período selecionado.</p>';
+                return;
+            }
+
+            let tableHtml = `
+                <table id="finance-report-table" class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Receitas Diárias (R$)</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Despesas Diárias (R$)</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Saldo Diário (R$)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+            `;
+
+            sortedDates.forEach(date => {
+                const data = dailyData[date];
+                const balance = data.receita - data.custo;
+                const balanceClass = balance >= 0 ? 'text-green-600' : 'text-red-600';
+                tableHtml += `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${date}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-green-500">R$ ${data.receita.toFixed(2)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-red-500">R$ ${data.custo.toFixed(2)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold ${balanceClass}">R$ ${balance.toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+
+            const grandTotalBalance = grandTotalRevenue - grandTotalCosts;
+            const grandTotalBalanceClass = grandTotalBalance >= 0 ? 'text-blue-700' : 'text-red-700';
+
+            tableHtml += `
+                    </tbody>
+                    <tfoot class="bg-gray-100 font-bold">
+                        <tr>
+                            <td class="px-6 py-3 text-left text-sm text-gray-900">TOTAL GERAL</td>
+                            <td class="px-6 py-3 text-left text-sm text-green-700">R$ ${grandTotalRevenue.toFixed(2)}</td>
+                            <td class="px-6 py-3 text-left text-sm text-red-700">R$ ${grandTotalCosts.toFixed(2)}</td>
+                            <td class="px-6 py-3 text-left text-sm ${grandTotalBalanceClass}">R$ ${grandTotalBalance.toFixed(2)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            `;
+
+            container.innerHTML = tableHtml;
+        }
+
+
+        // Função para exportar a tabela HTML para PDF (usando jsPDF e AutoTable)
+        window.exportReportToPDF = function(elementId, title) {
+            const tableElement = document.getElementById(elementId).querySelector('table');
+            if (!tableElement) {
+                showAlert("Erro de Exportação", "Nenhum relatório para exportar. Gere o relatório primeiro.");
+                return;
+            }
+            
+            // Força a exibição da tabela caso haja algum estilo CSS que a esconda antes da exportação
+            const originalDisplay = tableElement.style.display;
+            tableElement.style.display = 'table'; 
+
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF('p', 'pt', 'a4'); 
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const margin = 40;
+                
+                // Adiciona Título
+                doc.setFontSize(16);
+                doc.text(title, pageWidth / 2, 40, { align: 'center' });
+
+                // Adiciona Período
+                const startDate = document.getElementById('report-start-date').value;
+                const endDate = document.getElementById('report-end-date').value;
+                doc.setFontSize(10);
+                doc.text(`Período: ${startDate} a ${endDate}`, pageWidth / 2, 60, { align: 'center' });
+
+                // Gera Tabela
+                doc.autoTable({
+                    html: `#${tableElement.id}`,
+                    startY: 80,
+                    margin: { top: 80, left: margin, right: margin },
+                    styles: { fontSize: 8, cellPadding: 4 },
+                    headStyles: { fillColor: [59, 130, 246] }, // Azul
+                    footStyles: { fillColor: [243, 244, 246], fontStyle: 'bold' }, // Cinza Claro
+                    didParseCell: function(data) {
+                        // Aplica estilos de cor para o Saldo (Coluna 4 / index 3) no Relatório Financeiro
+                        if (tableElement.id === 'finance-report-table' && (data.cell.section === 'body' || data.cell.section === 'foot')) {
+                             const columnIndex = data.column.index;
+                             if (columnIndex === 3) { // Coluna Saldo
+                                 // Remove R$ e converte para número
+                                 const cellText = data.cell.text[0].replace('R$', '').trim().replace(',', '.');
+                                 const value = parseFloat(cellText);
+
+                                 if (!isNaN(value)) {
+                                     // Cores para body (mais suaves)
+                                     let textColor = value >= 0 ? [16, 185, 129] : [239, 68, 68]; 
+                                     if (data.cell.section === 'foot') {
+                                         // Cores mais escuras para footer (blue-700/red-700)
+                                         textColor = value >= 0 ? [29, 78, 216] : [153, 27, 27];
+                                     }
+                                     data.cell.styles.textColor = textColor;
+                                     data.cell.styles.fontStyle = 'bold'; // Adiciona negrito no saldo
+                                 }
+                             }
+                        }
+                    }
+                });
+
+                doc.save(`${title.replace(/[^a-z0-9]/gi, '_')}_${startDate}_${endDate}.pdf`);
+                showAlert("Sucesso!", "O relatório foi gerado em PDF.");
+            } catch (error) {
+                console.error("PDF generation error:", error);
+                showAlert("Erro", "Falha ao gerar o PDF. Verifique se o relatório está visível e as bibliotecas jsPDF/autotable foram carregadas.");
+            } finally {
+                // Restaura o estilo de exibição original
+                tableElement.style.display = originalDisplay; 
+            }
+        }
+        
+        // Função para lidar com o cancelamento de formulários (existente)
         window.cancelForm = function(formType) {
             if (formType === 'fazenda') {
                 document.getElementById('fazenda-form-container').classList.add('hidden');
